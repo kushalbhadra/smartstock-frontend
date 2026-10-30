@@ -1,9 +1,14 @@
 import axios from 'axios';
 
-// Base URL of Spring Boot backend
-export const API_BASE_URL = 'http://localhost:8080';
+// Use the configured backend in production and localhost during development.
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+export const API_BASE_URL = configuredApiBaseUrl
+    ? configuredApiBaseUrl.replace(/\/+$/, '')
+    : import.meta.env.DEV
+    ? 'http://localhost:8080'
+    : '';
 
-// Key used to store auth data in localStorage
+// Key used to store auth data per browser tab
 const TOKEN_KEY = 'smartstock_auth';
 
 // Create Axios instance with defaults
@@ -23,7 +28,7 @@ const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use(
     (config) => {
-        const raw = localStorage.getItem(TOKEN_KEY);
+        const raw = sessionStorage.getItem(TOKEN_KEY);
         if (raw) {
             try {
                 const auth = JSON.parse(raw);
@@ -31,8 +36,8 @@ axiosInstance.interceptors.request.use(
                     config.headers.Authorization = `Bearer ${auth.token}`;
                 }
             } catch {
-                // Corrupt localStorage data — ignore
-                localStorage.removeItem(TOKEN_KEY);
+                // Corrupt session data — ignore
+                sessionStorage.removeItem(TOKEN_KEY);
             }
         }
         return config;
@@ -48,8 +53,9 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
-            localStorage.removeItem(TOKEN_KEY);
+        const isLoginRequest = error.config?.url?.endsWith('/auth/login');
+        if (error.response?.status === 401 && !isLoginRequest) {
+            sessionStorage.removeItem(TOKEN_KEY);
             window.location.href = '/login';
         }
         return Promise.reject(error);

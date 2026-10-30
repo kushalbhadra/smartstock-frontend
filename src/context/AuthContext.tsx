@@ -1,32 +1,13 @@
 import {
-    createContext,
     useCallback,
-    useContext,
     useEffect,
     useState,
     type ReactNode,
 } from 'react';
 import type { AuthState, Role } from '../types';
+import { AuthContext, type AuthContextValue } from './authContextValue';
 
 const TOKEN_KEY = 'smartstock_auth';
-
-interface AuthContextValue extends AuthState {
-    login: (
-        token: string,
-        userId: number,
-        role: Role,
-        warehouseId: number | null,
-        name: string,
-        phone: string
-    ) => void;
-    logout: () => void;
-    isAdmin: boolean;
-    isManager: boolean;
-    isViewer: boolean;
-    canMutate: boolean;
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const emptyState: AuthState = {
     token: null,
@@ -40,19 +21,25 @@ const emptyState: AuthState = {
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<AuthState>(() => {
         try {
-            const raw = localStorage.getItem(TOKEN_KEY);
+            const raw = sessionStorage.getItem(TOKEN_KEY);
             if (raw) return JSON.parse(raw) as AuthState;
-        } catch {
             localStorage.removeItem(TOKEN_KEY);
+        } catch {
+            sessionStorage.removeItem(TOKEN_KEY);
+            try {
+                localStorage.removeItem(TOKEN_KEY);
+            } catch {
+                // Storage may be unavailable in restricted browser contexts.
+            }
         }
         return emptyState;
     });
 
     useEffect(() => {
         if (state.token) {
-            localStorage.setItem(TOKEN_KEY, JSON.stringify(state));
+            sessionStorage.setItem(TOKEN_KEY, JSON.stringify(state));
         } else {
-            localStorage.removeItem(TOKEN_KEY);
+            sessionStorage.removeItem(TOKEN_KEY);
         }
     }, [state]);
 
@@ -64,16 +51,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: string,
         phone: string
     ) => {
-        setState({ token, userId, role, warehouseId, name, phone });
+        const nextState = { token, userId, role, warehouseId, name, phone };
+        sessionStorage.setItem(TOKEN_KEY, JSON.stringify(nextState));
+        setState(nextState);
     }, []);
 
     const logout = useCallback(() => {
+        sessionStorage.removeItem(TOKEN_KEY);
         setState(emptyState);
+    }, []);
+
+    const updateProfile = useCallback((name: string, phone: string) => {
+        setState(prev => ({ ...prev, name, phone }));
     }, []);
 
     const value: AuthContextValue = {
         ...state,
         login,
+        updateProfile,
         logout,
         isAdmin:   state.role === 'ADMIN',
         isManager: state.role === 'WAREHOUSE_MGR',
@@ -87,12 +82,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             {children}
         </AuthContext.Provider>
     );
-}
-
-export function useAuth(): AuthContextValue {
-    const ctx = useContext(AuthContext);
-    if (!ctx) throw new Error(
-        'useAuth must be used within AuthProvider'
-    );
-    return ctx;
 }

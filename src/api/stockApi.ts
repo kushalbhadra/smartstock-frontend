@@ -3,10 +3,18 @@ import axiosInstance from './axiosInstance';
 import type {
     Stock,
     StockMovement,
+    StockMovementPage,
     StockMovementRequest,
+    StockTransferRequest,
+    StockAllocationRequest,
 } from '../types';
 
 export const stockApi = {
+    createAllocation: async (data: StockAllocationRequest): Promise<Stock> => {
+        const response = await axiosInstance.post('/api/stocks', data);
+        return response.data;
+    },
+
     getAll: async (): Promise<Stock[]> => {
         const response = await axiosInstance.get('/api/stocks');
         return response.data;
@@ -29,11 +37,37 @@ export const stockApi = {
         return response.data;
     },
 
+    getHistory: async (filters: {
+        type?: string;
+        warehouseId?: number;
+        from?: string;
+        to?: string;
+        search?: string;
+        page?: number;
+        size?: number;
+    }): Promise<StockMovementPage> => {
+        const response = await axiosInstance.get<StockMovementPage>(
+            '/api/stocks/movements/history',
+            { params: filters }
+        );
+        return response.data;
+    },
+
     recordMovement: async (
         data: StockMovementRequest
     ): Promise<StockMovement> => {
         const response = await axiosInstance.post(
             '/api/stocks/movements',
+            data
+        );
+        return response.data;
+    },
+
+    transfer: async (
+        data: StockTransferRequest
+    ): Promise<StockMovement[]> => {
+        const response = await axiosInstance.post(
+            '/api/stocks/transfers',
             data
         );
         return response.data;
@@ -46,10 +80,16 @@ export const stockApi = {
         return response.data;
     },
 
-    exportMovements: async (): Promise<Blob> => {
+    exportMovements: async (filters: {
+        type?: string;
+        warehouseId?: number;
+        from?: string;
+        to?: string;
+        search?: string;
+    } = {}): Promise<Blob> => {
         const response = await axiosInstance.get(
             '/api/stocks/movements/export',
-            { responseType: 'blob' }
+            { params: filters, responseType: 'blob' }
         );
         return response.data;
     },

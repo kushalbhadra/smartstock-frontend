@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     AlertTriangle, CheckCircle2,
     RefreshCw, Sparkles, TrendingUp,
 } from 'lucide-react';
 import { forecastApi } from '../api/forecastApi';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
 import { PageLoader } from '../components/ui/Spinner';
 import { fmt, fmtDateTime } from '../utils/format';
@@ -13,30 +13,32 @@ import type { DemandForecast } from '../types';
 
 export default function ForecastsPage() {
     const { isAdmin } = useAuth();
-    const toast = useToast();
+    const { error: showError, success: showSuccess } = useToast();
 
     const [forecasts, setForecasts] = useState<DemandForecast[] | null>(null);
     const [running, setRunning]     = useState(false);
 
-    const load = async () => {
+    const load = useCallback(async () => {
         try {
             setForecasts(await forecastApi.getAll());
         } catch {
-            toast.error('Failed to load forecasts');
+            showError('Failed to load forecasts');
         }
-    };
+    }, [showError]);
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        void Promise.resolve().then(load);
+    }, [load]);
 
     const handleRunJob = async () => {
         setRunning(true);
-        toast.success('AI forecast job started — this may take a minute...');
+        showSuccess('AI forecast job started — this may take a minute...');
         try {
             await forecastApi.runJob();
-            toast.success('Forecasts updated successfully');
-            load();
+            showSuccess('Forecasts updated successfully');
+            await load();
         } catch {
-            toast.error('Forecast job failed');
+            showError('Forecast job failed');
         } finally {
             setRunning(false);
         }

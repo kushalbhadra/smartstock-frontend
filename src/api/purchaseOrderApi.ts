@@ -13,10 +13,24 @@ export const purchaseOrderApi = {
         productId: number;
         warehouseId: number;
         quantity: number;
-        expectedDate: string;
+        purchaseUnitPrice: number;
+        expectedDate: string | null;
     }): Promise<PurchaseOrder> => {
         const response = await axiosInstance.post(
             '/api/purchase-orders', data
+        );
+        return response.data;
+    },
+
+    receive: async (id: number, data: {
+        quantity: number;
+        receivedDate: string;
+        warehouseId: number;
+        referenceNumber: string;
+        notes: string;
+    }): Promise<PurchaseOrder> => {
+        const response = await axiosInstance.post(
+            `/api/purchase-orders/${id}/receipts`, data
         );
         return response.data;
     },

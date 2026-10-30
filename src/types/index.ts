@@ -2,10 +2,12 @@
 
 export type Role = 'ADMIN' | 'WAREHOUSE_MGR' | 'VIEWER';
 
-export type MovementType = 'INBOUND' | 'OUTBOUND' | 'ADJUSTMENT';
+export type MovementType =
+    | 'INBOUND' | 'OUTBOUND' | 'ADJUSTMENT' | 'TRANSFER_IN' | 'TRANSFER_OUT';
 
 export type PurchaseOrderStatus =
-    'PENDING' | 'APPROVED' | 'DELIVERED' | 'CANCELLED';
+    | 'PENDING' | 'APPROVED' | 'PARTIALLY_RECEIVED'
+    | 'RECEIVED' | 'DELIVERED' | 'CANCELLED';
 
 export type AlertType =
     'LOW_STOCK' | 'ANOMALY' | 'PO_STATUS' | 'FORECAST_READY';
@@ -13,6 +15,21 @@ export type AlertType =
 export type AlertStatus = 'SENT' | 'FAILED' | 'SKIPPED';
 
 export type StockStatus = 'OK' | 'LOW' | 'CRITICAL' | 'OVERSTOCK';
+export type NotificationType =
+    | 'LOW_STOCK'
+    | 'OUT_OF_STOCK'
+    | 'OVERSTOCK'
+    | 'WAREHOUSE_NEAR_CAPACITY'
+    | 'WAREHOUSE_CAPACITY_FULL'
+    | 'WAREHOUSE_CAPACITY_EXCEEDED'
+    | 'FORECAST_ANOMALY'
+    | 'PURCHASE_ORDER_APPROVED'
+    | 'PURCHASE_ORDER_PARTIALLY_RECEIVED'
+    | 'PURCHASE_ORDER_RECEIVED';
+
+export type NotificationSeverity = 'CRITICAL' | 'WARNING' | 'INFO';
+export type NotificationTargetType =
+    | 'STOCK' | 'WAREHOUSE' | 'PRODUCT' | 'PURCHASE_ORDER';
 
 // ── AUTH ─────────────────────────────────────────────────────────────
 
@@ -39,8 +56,28 @@ export interface User {
     role: Role;
     warehouseId: number | null;
     phone: string;
-    whatsappAlertsEnabled: boolean;
     createdAt?: string;
+}
+
+export interface UserRequest {
+    name: string;
+    email: string;
+    role: Role;
+    warehouseId: number | null;
+    phone: string;
+    password?: string;
+}
+
+export interface UserProfileRequest {
+    name: string;
+    phone: string;
+}
+
+export interface SystemSettings {
+    companyName: string;
+    contactEmail: string;
+    contactPhone: string;
+    defaultLowStockThreshold: number;
 }
 
 export interface Warehouse {
@@ -48,6 +85,11 @@ export interface Warehouse {
     name: string;
     location: string;
     capacity: number;
+    usedCapacity: number;
+    remainingCapacity: number;
+    utilizationPercentage: number;
+    productCount: number;
+    capacityUnit: string;
     managerId: number | null;
     createdAt?: string;
 }
@@ -59,13 +101,17 @@ export interface Product {
     category: string;
     unit: string;
     price: number;
+    storageCapacityFactor: number;
     createdAt?: string;
 }
 
 export interface Stock {
     id: number;
-    product: Product;
-    warehouse: Warehouse;
+    warehouseId: number;
+    warehouseName: string;
+    productId: number;
+    productName: string;
+    sku: string;
     quantity: number;
     minQuantity: number;
     maxQuantity: number;
@@ -73,33 +119,60 @@ export interface Stock {
 
 export interface StockMovement {
     id: number;
-    stock: Stock;
+    stockId: number;
+    warehouseId: number;
+    warehouseName: string;
+    productId: number;
+    productName: string;
+    sku: string;
     movementType: MovementType;
     quantity: number;
     reason: string;
-    performedBy: User;
+    performedBy: string;
     createdAt: string;
+    previousQuantity: number | null;
+    newQuantity: number | null;
+    referenceNumber: string | null;
+    sourceWarehouseId: number | null;
+    sourceWarehouseName: string | null;
+    destinationWarehouseId: number | null;
+    destinationWarehouseName: string | null;
+}
+
+export interface StockMovementPage {
+    content: StockMovement[];
+    number: number;
+    totalPages: number;
+    totalElements: number;
 }
 
 export interface Supplier {
     id: number;
+    supplierCode?: string | null;
     name: string;
     contactEmail: string;
     phone: string;
+    contactPerson?: string | null;
+    address?: string | null;
     rating: number;
+    active?: boolean;
     createdAt?: string;
 }
 
 export interface PurchaseOrder {
     id: number;
     poNumber: string;
-    supplier: Supplier;
-    product: Product;
-    warehouse: Warehouse;
+    supplier: Pick<Supplier, 'id' | 'name' | 'contactEmail' | 'phone' | 'rating'>;
+    product: Pick<Product, 'id' | 'name' | 'sku'>;
+    warehouse: Pick<Warehouse, 'id' | 'name'>;
     quantity: number;
+    receivedQuantity: number;
+    remainingQuantity: number;
+    purchaseUnitPrice: number;
+    total: number;
     status: PurchaseOrderStatus;
-    expectedDate: string;
-    createdBy: User;
+    expectedDate: string | null;
+    createdBy: Pick<User, 'id' | 'name' | 'email'>;
     createdAt: string;
 }
 
@@ -117,12 +190,34 @@ export interface DemandForecast {
 
 export interface AlertLog {
     id: number;
-    user: User;
+    user: Pick<User, 'id' | 'name'>;
     alertType: AlertType;
     message: string;
     status: AlertStatus;
     relatedEntityId: number | null;
     sentAt: string;
+}
+
+export interface AppNotification {
+    id: number;
+    type: NotificationType;
+    title: string;
+    message: string;
+    severity: NotificationSeverity;
+    active: boolean;
+    readAt: string | null;
+    createdAt: string;
+    lastOccurredAt: string;
+    resolvedAt: string | null;
+    targetType: NotificationTargetType;
+    targetId: number;
+}
+
+export interface NotificationPage {
+    content: AppNotification[];
+    number: number;
+    totalPages: number;
+    totalElements: number;
 }
 
 // ── REQUESTS ─────────────────────────────────────────────────────────
@@ -133,14 +228,38 @@ export interface ProductRequest {
     category: string;
     unit: string;
     price: number;
+    storageCapacityFactor: number;
+    initialWarehouseId?: number;
+    initialQuantity?: number;
+    minQuantity?: number;
+    maxQuantity?: number;
 }
 
 export interface StockMovementRequest {
     warehouseId: number;
     productId: number;
     movementType: MovementType;
+    adjustmentDirection?: 'INCREASE' | 'DECREASE';
     quantity: number;
     reason: string;
+    referenceNumber?: string;
+}
+
+export interface StockAllocationRequest {
+    warehouseId: number;
+    productId: number;
+    quantity: number;
+    minQuantity: number;
+    maxQuantity: number;
+}
+
+export interface StockTransferRequest {
+    sourceWarehouseId: number;
+    destinationWarehouseId: number;
+    productId: number;
+    quantity: number;
+    reason: string;
+    referenceNumber: string;
 }
 
 // ── API RESPONSE ─────────────────────────────────────────────────────

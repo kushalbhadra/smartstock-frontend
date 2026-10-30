@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
     BarChart3, Bell, Boxes, Building2, ClipboardList,
     LayoutDashboard, LogOut, Menu, Package, Settings,
-    Sparkles, Truck, Users, X, Zap,
+    Sparkles, Truck, Users, X, Zap, CircleHelp, ClipboardClock, Database,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { cx } from '../utils/format';
 import { Badge } from './ui/Badge';
+import { NotificationBell } from './NotificationBell';
 
 // Navigation items — shown to all authenticated users
 const NAV_ITEMS = [
@@ -19,16 +20,20 @@ const NAV_ITEMS = [
     { to: '/purchase-orders', label: 'Purchase Orders', icon: ClipboardList },
     { to: '/suppliers',       label: 'Suppliers',       icon: Truck },
     { to: '/forecasts',       label: 'AI Forecasts',    icon: Sparkles },
-    { to: '/alerts',          label: 'Alerts',          icon: Zap },
+    { to: '/notifications',  label: 'Notifications',   icon: Bell },
+    { to: '/help',            label: 'Help & Support',  icon: CircleHelp },
 ];
 
 // Admin-only navigation items
 const ADMIN_ITEMS = [
     { to: '/users',    label: 'Users & Access', icon: Users },
     { to: '/settings', label: 'Settings',       icon: Settings },
+    { to: '/alerts', label: 'Alert History', icon: Zap },
+    { to: '/audit-log', label: 'Audit Log',      icon: ClipboardClock },
+    { to: '/data',      label: 'Data & Retention', icon: Database },
 ];
 
-export function AppShell() {
+export function AppShell({ children }: { children?: ReactNode }) {
     const { name, role, isAdmin, logout } = useAuth();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const navigate = useNavigate();
@@ -65,8 +70,18 @@ export function AppShell() {
             )}>
 
                 {/* Logo */}
-                <div className="h-16 flex items-center gap-3 px-5
-                                border-b border-slate-700/50">
+                <NavLink
+                    to="/"
+                    end
+                    onClick={() => setSidebarOpen(false)}
+                    aria-label="SmartStock dashboard"
+                    className="h-16 flex items-center gap-3 px-5
+                               border-b border-slate-700/50
+                               transition-colors hover:bg-slate-800
+                               focus-visible:outline-none
+                               focus-visible:ring-2 focus-visible:ring-inset
+                               focus-visible:ring-indigo-400"
+                >
                     <div className="w-9 h-9 bg-indigo-600 rounded-xl
                                     flex items-center justify-center">
                         <Package className="w-5 h-5 text-white"
@@ -76,7 +91,7 @@ export function AppShell() {
                                      tracking-tight">
                         SmartStock
                     </span>
-                </div>
+                </NavLink>
 
                 {/* Navigation */}
                 <nav className="flex-1 overflow-y-auto p-4 space-y-1">
@@ -222,14 +237,7 @@ export function AppShell() {
 
                     {/* Right side */}
                     <div className="flex items-center gap-4">
-                        <button className="relative text-slate-400
-                                           hover:text-slate-600"
-                                aria-label="Notifications">
-                            <Bell className="w-5 h-5" />
-                            <span className="absolute -top-0.5 -right-0.5
-                                             w-2 h-2 rounded-full
-                                             bg-rose-500 ring-2 ring-white" />
-                        </button>
+                        <NotificationBell />
 
                         <div className="h-8 w-px bg-slate-200" />
 
@@ -267,8 +275,16 @@ export function AppShell() {
                 {/* Page content — Outlet renders current route */}
                 <main className="flex-1 p-5 sm:p-7 lg:p-8
                                  max-w-[1600px] w-full mx-auto">
-                    <Outlet />
+                    {children ?? <Outlet />}
                 </main>
+                <footer className="border-t border-slate-200 bg-white px-5 py-4 text-xs text-slate-500 sm:px-8">
+                    <div className="flex flex-wrap gap-x-5 gap-y-2">
+                        <NavLink to="/help" className="hover:text-indigo-700">Help & Support</NavLink>
+                        <NavLink to="/privacy" className="hover:text-indigo-700">Privacy policy</NavLink>
+                        <NavLink to="/terms" className="hover:text-indigo-700">Terms of use</NavLink>
+                        <NavLink to="/data" className="hover:text-indigo-700">Data & Retention</NavLink>
+                    </div>
+                </footer>
             </div>
         </div>
     );

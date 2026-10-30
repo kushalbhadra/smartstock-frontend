@@ -1,30 +1,34 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pencil, Plus, Star, Trash2, Truck } from 'lucide-react';
 import { supplierApi } from '../api/supplierApi';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
+import { purchaseOrderApi } from '../api/purchaseOrderApi';
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { TableWrap, Td, Th } from '../components/Table';
-import type { Supplier } from '../types';
+import { getApiErrorMessage } from '../utils/apiError';
+import { money } from '../utils/format';
+import type { PurchaseOrder, Supplier } from '../types';
 
 // Star rating display component
 function StarRating({ rating }: { rating: number }) {
+    const safeRating = rating ?? 0;
     return (
         <span className="inline-flex items-center gap-0.5">
             {[1, 2, 3, 4, 5].map(i => (
                 <Star
                     key={i}
                     className={`w-3.5 h-3.5 ${
-                        i <= Math.round(rating)
+                        i <= Math.round(safeRating)
                             ? 'text-amber-400 fill-amber-400'
                             : 'text-slate-200 fill-slate-200'
                     }`}
                 />
             ))}
             <span className="text-xs font-semibold text-slate-600 ml-1">
-                {rating.toFixed(1)}
+                {safeRating.toFixed(1)}
             </span>
         </span>
     );
@@ -36,6 +40,7 @@ export default function SuppliersPage() {
     const toast = useToast();
 
     const [suppliers, setSuppliers]   = useState<Supplier[] | null>(null);
+    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [showAdd, setShowAdd]       = useState(false);
     const [editItem, setEditItem]     = useState<Supplier | null>(null);
     const [deleteItem, setDeleteItem] = useState<Supplier | null>(null);
@@ -44,6 +49,12 @@ export default function SuppliersPage() {
 const load = useCallback(async () => {
     try {
         setSuppliers(await supplierApi.getAll());
+        try {
+            setPurchaseOrders(await purchaseOrderApi.getAll());
+        } catch {
+            setPurchaseOrders([]);
+            error('Supplier purchase history is unavailable');
+        }
     } catch {
         error('Failed to load suppliers');
     }
@@ -71,8 +82,8 @@ useEffect(() => {
             toast.success('Supplier deleted');
             setDeleteItem(null);
             load();
-        } catch {
-            toast.error('Delete failed');
+        } catch (error: unknown) {
+            toast.error(getApiErrorMessage(error, 'Delete failed'));
         }
     };
 
@@ -108,10 +119,14 @@ useEffect(() => {
                     <TableWrap>
                         <thead>
                             <tr>
-                                <Th>Supplier</Th>
+                                <Th>Supplier / Code</Th>
+                                <Th>Contact person</Th>
                                 <Th>Email</Th>
                                 <Th>Phone</Th>
+                                <Th>Address</Th>
                                 <Th>Rating</Th>
+                                <Th>Purchase history</Th>
+                                <Th>Status</Th>
                                 {isAdmin && <Th>Actions</Th>}
                             </tr>
                         </thead>
@@ -136,16 +151,49 @@ useEffect(() => {
                                                              text-slate-800">
                                                 {s.name}
                                             </span>
+                                            <span className="block text-xs text-slate-500">
+                                                {s.supplierCode || 'No supplier code'}
+                                            </span>
                                         </div>
                                     </Td>
+                                    <Td>{s.contactPerson || '—'}</Td>
                                     <Td className="text-slate-500">
                                         {s.contactEmail || '—'}
                                     </Td>
                                     <Td className="text-slate-500">
                                         {s.phone || '—'}
                                     </Td>
+                                    <Td className="max-w-[200px] truncate text-slate-500">
+                                        {s.address || '—'}
+                                    </Td>
                                     <Td>
                                         <StarRating rating={s.rating} />
+                                    </Td>
+                                    <Td>
+                                        {(() => {
+                                            const orders = purchaseOrders.filter(
+                                                order => order.supplier.id === s.id
+                                            );
+                                            const spend = orders.reduce(
+                                                (sum, order) => sum + order.total,
+                                                0
+                                            );
+                                            return (
+                                                <span className="text-xs text-slate-600">
+                                                    {orders.length} orders
+                                                    {' · '}{money(spend)}
+                                                </span>
+                                            );
+                                        })()}
+                                    </Td>
+                                    <Td>
+                                        <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                            s.active === false
+                                                ? 'bg-slate-100 text-slate-600'
+                                                : 'bg-emerald-50 text-emerald-700'
+                                        }`}>
+                                            {s.active === false ? 'Inactive' : 'Active'}
+                                        </span>
                                     </Td>
                                     {isAdmin && (
                                         <Td>
@@ -224,22 +272,26 @@ function SupplierFormModal({
     const isEdit = !!supplier;
 
     const [form, setForm] = useState({
+        supplierCode: supplier?.supplierCode ?? '',
         name:         supplier?.name         ?? '',
         contactEmail: supplier?.contactEmail ?? '',
         phone:        supplier?.phone        ?? '',
+        contactPerson: supplier?.contactPerson ?? '',
+        address: supplier?.address ?? '',
         rating:       supplier?.rating       ?? 3.0,
+        active:       supplier?.active ?? true,
     });
     const [loading, setLoading] = useState(false);
 
     const handleChange = (
-        e: React.ChangeEvent<HTMLInputElement>
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
     ) => {
         const { name, value } = e.target;
         setForm(prev => ({
             ...prev,
             [name]: name === 'rating'
                 ? parseFloat(value) || 0
-                : value,
+                : name === 'active' ? value === 'true' : value,
         }));
     };
 
@@ -259,8 +311,8 @@ function SupplierFormModal({
                 toast.success('Supplier created');
             }
             onSaved();
-        } catch {
-            toast.error('Save failed');
+        } catch (error: unknown) {
+            toast.error(getApiErrorMessage(error, 'Save failed'));
         } finally {
             setLoading(false);
         }
@@ -272,6 +324,17 @@ function SupplierFormModal({
             onClose={onClose}
         >
             <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="label">Supplier Code</label>
+                    <input
+                        name="supplierCode"
+                        value={form.supplierCode}
+                        onChange={handleChange}
+                        maxLength={40}
+                        className="input uppercase"
+                        placeholder="e.g. SUP-001"
+                    />
+                </div>
                 <div>
                     <label className="label">Supplier Name *</label>
                     <input
@@ -304,6 +367,31 @@ function SupplierFormModal({
                     />
                 </div>
                 <div>
+                    <label className="label">Contact Person</label>
+                    <input
+                        name="contactPerson"
+                        value={form.contactPerson}
+                        onChange={handleChange}
+                        maxLength={150}
+                        className="input"
+                        placeholder="Name of primary contact"
+                    />
+                </div>
+                <div>
+                    <label className="label">Address</label>
+                    <textarea
+                        name="address"
+                        value={form.address}
+                        onChange={event => setForm(prev => ({
+                            ...prev, address: event.target.value,
+                        }))}
+                        maxLength={500}
+                        rows={2}
+                        className="input resize-none"
+                        placeholder="Supplier business address"
+                    />
+                </div>
+                <div>
                     <label className="label">
                         Rating: {form.rating.toFixed(1)} / 5.0
                     </label>
@@ -322,6 +410,18 @@ function SupplierFormModal({
                         <span>0</span>
                         <StarRating rating={form.rating} />
                         <span>5</span>
+                    </div>
+                    <div>
+                        <label className="label">Status</label>
+                        <select
+                            name="active"
+                            value={String(form.active)}
+                            onChange={handleChange}
+                            className="input"
+                        >
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 pt-2">

@@ -1,5 +1,5 @@
 import axiosInstance from './axiosInstance';
-import type { User } from '../types';
+import type { User, UserProfileRequest, UserRequest } from '../types';
 
 export const userApi = {
 
@@ -8,16 +8,26 @@ export const userApi = {
         return response.data;
     },
 
-    create: async (data: Partial<User> & {
-        password?: string
-    }): Promise<User> => {
+    getCurrentProfile: async (): Promise<User> => {
+        const response = await axiosInstance.get('/api/users/me');
+        return response.data;
+    },
+
+    updateCurrentProfile: async (
+        data: UserProfileRequest
+    ): Promise<User> => {
+        const response = await axiosInstance.put('/api/users/me', data);
+        return response.data;
+    },
+
+    create: async (data: UserRequest): Promise<User> => {
         const response = await axiosInstance.post('/api/users', data);
         return response.data;
     },
 
     update: async (
         id: number,
-        data: Partial<User>
+        data: UserRequest
     ): Promise<User> => {
         const response = await axiosInstance.put(`/api/users/${id}`, data);
         return response.data;

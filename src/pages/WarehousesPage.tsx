@@ -1,19 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { warehouseApi } from '../api/warehouseApi';
 import { userApi } from '../api/userApi';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { TableWrap, Td, Th } from '../components/Table';
 import { fmt } from '../utils/format';
+import { getApiErrorMessage } from '../utils/apiError';
 import type { User, Warehouse } from '../types';
 
 export default function WarehousesPage() {
     const { isAdmin } = useAuth();
-    const toast = useToast();
+    const { error: showError, success: showSuccess } = useToast();
+    const [searchParams] = useSearchParams();
+    const focusWarehouseId = Number(searchParams.get('warehouseId'));
 
     const [warehouses, setWarehouses] = useState<Warehouse[] | null>(null);
     const [users, setUsers]           = useState<User[]>([]);
@@ -21,48 +25,32 @@ export default function WarehousesPage() {
     const [editItem, setEditItem]     = useState<Warehouse | null>(null);
     const [deleteItem, setDeleteItem] = useState<Warehouse | null>(null);
 
-    
-    const load = async () => {
+    const load = useCallback(async () => {
         try {
-            setWarehouses(await warehouseApi.getAll());
+            const [warehouseList, userList] = await Promise.all([
+                warehouseApi.getAll(),
+                isAdmin ? userApi.getAll() : Promise.resolve([] as User[]),
+            ]);
+            setWarehouses(warehouseList);
+            setUsers(userList);
         } catch {
-            toast.error('Failed to load warehouses');
+            showError('Failed to load warehouses');
         }
-    };
+    }, [isAdmin, showError]);
 
     useEffect(() => {
-        let active = true;
-
-        const fetchWarehouses = async () => {
-            try {
-                const result = await warehouseApi.getAll();
-                if (active) {
-                    setWarehouses(result);
-                }
-            } catch {
-                if (active) {
-                    toast.error('Failed to load warehouses');
-                }
-            }
-        };
-
-        void fetchWarehouses();
-
-        return () => {
-            active = false;
-        };
-    }, [toast.error]);
-
+        void Promise.resolve().then(load);
+    }, [load]);
 
     const handleDelete = async () => {
         if (!deleteItem) return;
         try {
             await warehouseApi.delete(deleteItem.id);
-            toast.success('Warehouse deleted');
+            showSuccess('Warehouse deleted');
             setDeleteItem(null);
-            load();
-        } catch {
-            toast.error('Delete failed');
+            await load();
+        } catch (reason) {
+            showError(getApiErrorMessage(reason, 'Delete failed'));
         }
     };
 
@@ -74,6 +62,9 @@ export default function WarehousesPage() {
         );
         return manager?.name ?? '—';
     };
+    const visibleWarehouses = warehouses?.filter(warehouse =>
+        !focusWarehouseId || warehouse.id === focusWarehouseId
+    ) ?? [];
 
     return (
         <>
@@ -97,7 +88,7 @@ export default function WarehousesPage() {
             <div className="card">
                 {!warehouses ? (
                     <TableSkeleton cols={5} />
-                ) : warehouses.length === 0 ? (
+                ) : visibleWarehouses.length === 0 ? (
                     <EmptyState
                         icon={Building2}
                         title="No warehouses yet"
@@ -115,7 +106,7 @@ export default function WarehousesPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {warehouses.map(wh => (
+                            {visibleWarehouses.map(wh => (
                                 <tr key={wh.id}
                                     className="hover:bg-slate-50/60
                                                transition-colors">
@@ -142,8 +133,41 @@ export default function WarehousesPage() {
                                         </span>
                                         <span className="text-slate-400
                                                          text-xs ml-1">
-                                            units
+                                                         {wh.capacityUnit || 'storage units'}
                                         </span>
+                                        <div className="mt-2 w-40">
+                                                         <div className="mb-1 flex justify-between
+                                                                         text-[11px] text-slate-500">
+                                                             <span>
+                                                                 {fmt(wh.usedCapacity ?? 0)} used
+                                                             </span>
+                                                             <span>
+                                                                 {Number(wh.utilizationPercentage ?? 0).toFixed(1)}%
+                                                             </span>
+                                                         </div>
+                                                         <div className="h-1.5 overflow-hidden
+                                                                         rounded-full bg-slate-100">
+                                                             <div
+                                                                 className={`h-full rounded-full ${
+                                                                     wh.utilizationPercentage > 100
+                                                                         ? 'bg-rose-500'
+                                                                         : wh.utilizationPercentage >= 90
+                                                                         ? 'bg-amber-500'
+                                                                         : 'bg-blue-500'
+                                                                 }`}
+                                                                 style={{
+                                                                     width: `${Math.min(100,
+                                                                         Math.max(0,
+                                                                             Number(wh.utilizationPercentage ?? 0)))}%`,
+                                                                 }}
+                                                             />
+                                                         </div>
+                                                         <span className="mt-1 block text-[11px]
+                                                                           text-slate-400">
+                                                             {fmt(wh.remainingCapacity ?? wh.capacity)} remaining
+                                                             · {wh.productCount ?? 0} products
+                                                         </span>
+                                        </div>
                                     </Td>
                                     <Td>{getManagerName(wh)}</Td>
                                     {isAdmin && (
@@ -247,8 +271,8 @@ function WarehouseFormModal({ warehouse, onClose, onSaved }: {
                 toast.success('Warehouse created');
             }
             onSaved();
-        } catch {
-            toast.error('Save failed');
+        } catch (reason) {
+            toast.error(getApiErrorMessage(reason, 'Save failed'));
         } finally {
             setLoading(false);
         }

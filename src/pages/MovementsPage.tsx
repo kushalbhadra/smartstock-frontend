@@ -1,70 +1,96 @@
-import { useEffect, useState } from 'react';
-import { BarChart3, Download, Plus } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeftRight, BarChart3, Download, Plus } from 'lucide-react';
 import { stockApi } from '../api/stockApi';
 import { productApi } from '../api/productApi';
 import { warehouseApi } from '../api/warehouseApi';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { EmptyRow, TableWrap, Td, Th } from '../components/Table';
 import { downloadBlob } from '../utils/excel';
+import { getApiErrorMessage } from '../utils/apiError';
 import { fmtDateTime } from '../utils/format';
 import type {
-    Product, StockMovement,
-    StockMovementRequest, Warehouse,
+    Product, StockMovementPage, StockMovementRequest, Warehouse,
+    StockTransferRequest, MovementType,
 } from '../types';
 
 // Movement type → badge tone
-const TYPE_TONE = {
+const TYPE_TONE: Record<MovementType, 'green' | 'red' | 'yellow' | 'blue' | 'purple'> = {
     INBOUND:    'green',
     OUTBOUND:   'red',
     ADJUSTMENT: 'yellow',
+    TRANSFER_IN: 'blue',
+    TRANSFER_OUT: 'purple',
 } as const;
 
 export default function MovementsPage() {
-    const { canMutate, isManager, warehouseId } = useAuth();
-    const toast = useToast();
+    const { canMutate, isAdmin, isManager, warehouseId } = useAuth();
+    const { error: showError, success: showSuccess } = useToast();
 
-    const [movements, setMovements]   = useState<StockMovement[] | null>(null);
+    const [movementPage, setMovementPage] = useState<StockMovementPage | null>(null);
     const [products, setProducts]     = useState<Product[]>([]);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [showAdd, setShowAdd]       = useState(false);
+    const [showTransfer, setShowTransfer] = useState(false);
     const [typeFilter, setTypeFilter] = useState('All');
+    const [search, setSearch] = useState('');
+    const [warehouseFilter, setWarehouseFilter] = useState('All');
+    const [from, setFrom] = useState('');
+    const [to, setTo] = useState('');
+    const [page, setPage] = useState(0);
 
-    const load = async () => {
+    const load = useCallback(async () => {
         try {
-            const [m, p, w] = await Promise.all([
-                stockApi.getMovements(),
+            const [movementResult, p, w] = await Promise.all([
+                stockApi.getHistory({
+                    ...(typeFilter !== 'All'
+                        ? { type: typeFilter } : {}),
+                    ...(warehouseFilter !== 'All'
+                        ? { warehouseId: Number(warehouseFilter) } : {}),
+                    ...(from ? { from } : {}),
+                    ...(to ? { to } : {}),
+                    ...(search ? { search } : {}),
+                    page,
+                    size: 20,
+                }),
                 productApi.getAll(),
                 warehouseApi.getAll(),
             ]);
-            setMovements(m);
+            setMovementPage(movementResult);
             setProducts(p);
             setWarehouses(w);
         } catch {
-            toast.error('Failed to load movements');
+            showError('Failed to load movements');
         }
-    };
+    }, [from, page, search, showError, to, typeFilter, warehouseFilter]);
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        void Promise.resolve().then(load);
+    }, [load]);
 
     const handleExport = async () => {
         try {
-            const blob = await stockApi.exportMovements();
+            const blob = await stockApi.exportMovements({
+                ...(typeFilter !== 'All' ? { type: typeFilter } : {}),
+                ...(warehouseFilter !== 'All'
+                    ? { warehouseId: Number(warehouseFilter) } : {}),
+                ...(from ? { from } : {}),
+                ...(to ? { to } : {}),
+                ...(search ? { search } : {}),
+            });
             downloadBlob(blob, 'stock-movements.xlsx');
-            toast.success('Movements exported');
+            showSuccess('Movements exported');
         } catch {
-            toast.error('Export failed');
+            showError('Export failed');
         }
     };
 
     // Filter by movement type
-    const filtered = movements?.filter(m =>
-        typeFilter === 'All' || m.movementType === typeFilter
-    ) ?? [];
+    const filtered = movementPage?.content ?? [];
 
     return (
         <>
@@ -76,14 +102,67 @@ export default function MovementsPage() {
                     <>
                         <select
                             value={typeFilter}
-                            onChange={e => setTypeFilter(e.target.value)}
+                            onChange={e => {
+                                setTypeFilter(e.target.value);
+                                setPage(0);
+                            }}
                             className="input sm:max-w-[170px]"
                         >
                             <option value="All">All Types</option>
                             <option value="INBOUND">Inbound</option>
                             <option value="OUTBOUND">Outbound</option>
                             <option value="ADJUSTMENT">Adjustment</option>
+                            <option value="TRANSFER_IN">Transfer in</option>
+                            <option value="TRANSFER_OUT">Transfer out</option>
                         </select>
+                        <select
+                            value={warehouseFilter}
+                            onChange={event => {
+                                setWarehouseFilter(event.target.value);
+                                setPage(0);
+                            }}
+                            className="input sm:max-w-[180px]"
+                        >
+                            <option value="All">All warehouses</option>
+                            {warehouses.map(warehouse => (
+                                <option key={warehouse.id} value={warehouse.id}>
+                                    {warehouse.name}
+                                </option>
+                            ))}
+                        </select>
+                        <input
+                            value={search}
+                            onChange={event => {
+                                setSearch(event.target.value);
+                                setPage(0);
+                            }}
+                            className="input sm:max-w-[220px]"
+                            placeholder="Search product or reference"
+                        />
+                        <label className="flex items-center gap-2 text-xs text-slate-500">
+                            From
+                            <input
+                                type="date"
+                                value={from}
+                                onChange={event => {
+                                    setFrom(event.target.value);
+                                    setPage(0);
+                                }}
+                                className="input sm:max-w-[150px]"
+                            />
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-slate-500">
+                            To
+                            <input
+                                type="date"
+                                value={to}
+                                onChange={event => {
+                                    setTo(event.target.value);
+                                    setPage(0);
+                                }}
+                                className="input sm:max-w-[150px]"
+                            />
+                        </label>
 
                         <button
                             onClick={handleExport}
@@ -94,21 +173,30 @@ export default function MovementsPage() {
                         </button>
 
                         {canMutate && (
-                            <button
-                                onClick={() => setShowAdd(true)}
-                                className="btn-primary"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Record Movement
-                            </button>
+                            <>
+                                <button
+                                    onClick={() => setShowAdd(true)}
+                                    className="btn-secondary"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Record Movement
+                                </button>
+                                {isAdmin && <button
+                                    onClick={() => setShowTransfer(true)}
+                                    className="btn-primary"
+                                >
+                                    <ArrowLeftRight className="w-4 h-4" />
+                                    Transfer Stock
+                                </button>}
+                            </>
                         )}
                     </>
                 }
             />
 
             <div className="card">
-                {!movements ? (
-                    <TableSkeleton cols={7} />
+                {!movementPage ? (
+                    <TableSkeleton cols={9} />
                 ) : filtered.length === 0 ? (
                     <EmptyState
                         icon={BarChart3}
@@ -123,6 +211,8 @@ export default function MovementsPage() {
                                 <Th>Warehouse</Th>
                                 <Th>Type</Th>
                                 <Th>Quantity</Th>
+                                <Th>Balance</Th>
+                                <Th>Reference / Route</Th>
                                 <Th>Reason</Th>
                                 <Th>Performed By</Th>
                                 <Th>Date</Th>
@@ -131,7 +221,7 @@ export default function MovementsPage() {
                         <tbody>
                             {filtered.length === 0 ? (
                                 <EmptyRow
-                                    colSpan={7}
+                                    colSpan={9}
                                     message="No movements match filter"
                                 />
                             ) : filtered.map(m => (
@@ -141,11 +231,11 @@ export default function MovementsPage() {
                                     <Td>
                                         <span className="font-medium
                                                          text-slate-800">
-                                            {m.stock?.product?.name ?? '—'}
+                                            {m.productName}
                                         </span>
                                     </Td>
                                     <Td>
-                                        {m.stock?.warehouse?.name ?? '—'}
+                                        {m.warehouseName}
                                     </Td>
                                     <Td>
                                         <Badge
@@ -155,27 +245,56 @@ export default function MovementsPage() {
                                         </Badge>
                                     </Td>
                                     <Td>
+                                        {(() => {
+                                            const delta = m.previousQuantity == null
+                                                    || m.newQuantity == null
+                                                    ? 0
+                                                    : m.newQuantity - m.previousQuantity;
+                                            const increases = m.movementType === 'INBOUND'
+                                                    || m.movementType === 'TRANSFER_IN'
+                                                    || (m.movementType === 'ADJUSTMENT'
+                                                        && delta > 0);
+                                            const decreases = m.movementType === 'OUTBOUND'
+                                                    || m.movementType === 'TRANSFER_OUT'
+                                                    || (m.movementType === 'ADJUSTMENT'
+                                                        && delta < 0);
+                                            return (
                                         <span className={`font-bold ${
-                                            m.movementType === 'INBOUND'
-                                                ? 'text-emerald-600'
-                                                : m.movementType === 'OUTBOUND'
-                                                ? 'text-rose-600'
-                                                : 'text-amber-600'
+                                            increases
+                                                    ? 'text-emerald-600'
+                                                    : decreases
+                                                    ? 'text-rose-600'
+                                                    : 'text-amber-600'
                                         }`}>
-                                            {m.movementType === 'INBOUND'
-                                                ? '+'
-                                                : m.movementType === 'OUTBOUND'
-                                                ? '-'
-                                                : ''
-                                            }
+                                                    {increases ? '+' : decreases ? '-' : ''}
                                             {m.quantity}
                                         </span>
+                                            );
+                                        })()}
+                                    </Td>
+                                    <Td className="whitespace-nowrap text-xs">
+                                        {m.previousQuantity == null
+                                            || m.newQuantity == null
+                                            ? '—'
+                                            : `${m.previousQuantity} → ${m.newQuantity}`}
+                                    </Td>
+                                    <Td className="max-w-[200px] text-xs">
+                                        {m.referenceNumber && (
+                                            <span className="block font-medium text-slate-700">
+                                                {m.referenceNumber}
+                                            </span>
+                                        )}
+                                        {m.movementType === 'TRANSFER_OUT'
+                                            ? `To ${m.destinationWarehouseName ?? 'warehouse'}`
+                                            : m.movementType === 'TRANSFER_IN'
+                                            ? `From ${m.sourceWarehouseName ?? 'warehouse'}`
+                                            : m.reason || '—'}
                                     </Td>
                                     <Td className="max-w-[200px] truncate">
                                         {m.reason || '—'}
                                     </Td>
                                     <Td>
-                                        {m.performedBy?.name ?? '—'}
+                                        {m.performedBy}
                                     </Td>
                                     <Td className="whitespace-nowrap
                                                    text-slate-500 text-xs">
@@ -188,6 +307,33 @@ export default function MovementsPage() {
                 )}
             </div>
 
+            {movementPage && movementPage.totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                    <span className="text-sm text-slate-500">
+                        Page {movementPage.number + 1} of {movementPage.totalPages}
+                        {' · '}{movementPage.totalElements} total movements
+                    </span>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={page === 0}
+                            onClick={() => setPage(current => current - 1)}
+                        >
+                            Previous
+                        </button>
+                        <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={page + 1 >= movementPage.totalPages}
+                            onClick={() => setPage(current => current + 1)}
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {showAdd && (
                 <MovementFormModal
                     products={products}
@@ -199,6 +345,15 @@ export default function MovementsPage() {
                     }
                     onClose={() => setShowAdd(false)}
                     onSaved={() => { setShowAdd(false); load(); }}
+                />
+            )}
+            {showTransfer && (
+                <TransferFormModal
+                    products={products}
+                    warehouses={warehouses}
+                    defaultWarehouseId={isManager ? warehouseId ?? undefined : undefined}
+                    onClose={() => setShowTransfer(false)}
+                    onSaved={() => { setShowTransfer(false); void load(); }}
                 />
             )}
         </>
@@ -220,14 +375,16 @@ function MovementFormModal({
     onClose: () => void;
     onSaved: () => void;
 }) {
-    const toast = useToast();
+    const { error: showError, success: showSuccess } = useToast();
 
     const [form, setForm] = useState<StockMovementRequest>({
         warehouseId:  defaultWarehouseId ?? 0,
         productId:    0,
         movementType: 'INBOUND',
+        adjustmentDirection: 'INCREASE',
         quantity:     1,
         reason:       '',
+        referenceNumber: '',
     });
     const [loading, setLoading] = useState(false);
 
@@ -252,24 +409,24 @@ function MovementFormModal({
 
         // Validation
         if (!form.warehouseId || !form.productId) {
-            toast.error('Please select warehouse and product');
+            showError('Please select warehouse and product');
             return;
         }
         if (form.quantity < 1) {
-            toast.error('Quantity must be at least 1');
+            showError('Quantity must be at least 1');
             return;
         }
 
         setLoading(true);
         try {
             await stockApi.recordMovement(form);
-            toast.success('Movement recorded successfully');
+            showSuccess('Movement recorded successfully');
             onSaved();
         } catch (err: unknown) {
-            const msg = err instanceof Error
-                ? err.message
-                : 'Failed to record movement';
-            toast.error(msg);
+            showError(getApiErrorMessage(
+                err,
+                'Failed to record movement'
+            ));
         } finally {
             setLoading(false);
         }
@@ -354,8 +511,33 @@ function MovementFormModal({
                         />
                     </div>
                 </div>
+                {form.movementType === 'ADJUSTMENT' && (
+                    <div>
+                        <label className="label">Adjustment direction *</label>
+                        <select
+                            name="adjustmentDirection"
+                            value={form.adjustmentDirection}
+                            onChange={handleChange}
+                            className="input"
+                        >
+                            <option value="INCREASE">Increase stock</option>
+                            <option value="DECREASE">Decrease stock</option>
+                        </select>
+                    </div>
+                )}
 
                 {/* Reason */}
+                <div>
+                    <label className="label">Reference</label>
+                    <input
+                        name="referenceNumber"
+                        value={form.referenceNumber}
+                        onChange={handleChange}
+                        maxLength={120}
+                        className="input"
+                        placeholder="Invoice, order or document number"
+                    />
+                </div>
                 <div>
                     <label className="label">Reason</label>
                     <textarea
@@ -390,6 +572,168 @@ function MovementFormModal({
                         className="btn-primary"
                     >
                         {loading ? 'Recording...' : 'Record Movement'}
+                    </button>
+                </div>
+            </form>
+        </Modal>
+    );
+}
+
+function TransferFormModal({
+    products,
+    warehouses,
+    defaultWarehouseId,
+    onClose,
+    onSaved,
+}: {
+    products: Product[];
+    warehouses: Warehouse[];
+    defaultWarehouseId?: number;
+    onClose: () => void;
+    onSaved: () => void;
+}) {
+    const { error: showError, success: showSuccess } = useToast();
+    const [form, setForm] = useState<StockTransferRequest>({
+        sourceWarehouseId: defaultWarehouseId ?? 0,
+        destinationWarehouseId: 0,
+        productId: 0,
+        quantity: 1,
+        reason: '',
+        referenceNumber: '',
+    });
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!form.sourceWarehouseId || !form.destinationWarehouseId
+            || form.sourceWarehouseId === form.destinationWarehouseId
+            || !form.productId || form.quantity < 1) {
+            showError('Choose different source and destination warehouses, a product, and a positive quantity.');
+            return;
+        }
+        setLoading(true);
+        try {
+            await stockApi.transfer(form);
+            showSuccess('Stock transfer recorded');
+            onSaved();
+        } catch (reason) {
+            showError(getApiErrorMessage(reason, 'Transfer failed'));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const update = (
+        event: React.ChangeEvent<
+            HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+        >
+    ) => {
+        const { name, value } = event.target;
+        setForm(current => ({
+            ...current,
+            [name]: name === 'sourceWarehouseId'
+                || name === 'destinationWarehouseId'
+                || name === 'productId'
+                || name === 'quantity'
+                ? Number.parseInt(value, 10) || 0
+                : value,
+        }));
+    };
+
+    return (
+        <Modal title="Transfer Stock" onClose={onClose}>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                    <label>
+                        <span className="label">Source warehouse *</span>
+                        <select
+                            name="sourceWarehouseId"
+                            value={form.sourceWarehouseId}
+                            onChange={update}
+                            disabled={!!defaultWarehouseId}
+                            className="input"
+                        >
+                            <option value={0}>Select source...</option>
+                            {warehouses.map(warehouse => (
+                                <option key={warehouse.id} value={warehouse.id}>
+                                    {warehouse.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label>
+                        <span className="label">Destination *</span>
+                        <select
+                            name="destinationWarehouseId"
+                            value={form.destinationWarehouseId}
+                            onChange={update}
+                            className="input"
+                        >
+                            <option value={0}>Select destination...</option>
+                            {warehouses.filter(warehouse =>
+                                warehouse.id !== form.sourceWarehouseId
+                            ).map(warehouse => (
+                                <option key={warehouse.id} value={warehouse.id}>
+                                    {warehouse.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
+                <label>
+                    <span className="label">Product *</span>
+                    <select
+                        name="productId"
+                        value={form.productId}
+                        onChange={update}
+                        className="input"
+                    >
+                        <option value={0}>Select product...</option>
+                        {products.map(product => (
+                            <option key={product.id} value={product.id}>
+                                {product.name} ({product.sku})
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label>
+                    <span className="label">Quantity *</span>
+                    <input
+                        name="quantity"
+                        type="number"
+                        min="1"
+                        value={form.quantity}
+                        onChange={update}
+                        className="input"
+                    />
+                </label>
+                <label>
+                    <span className="label">Reference</span>
+                    <input
+                        name="referenceNumber"
+                        value={form.referenceNumber}
+                        onChange={update}
+                        maxLength={120}
+                        className="input"
+                    />
+                </label>
+                <label>
+                    <span className="label">Reason</span>
+                    <textarea
+                        name="reason"
+                        value={form.reason}
+                        onChange={update}
+                        maxLength={500}
+                        className="input"
+                        rows={2}
+                    />
+                </label>
+                <div className="flex justify-end gap-3">
+                    <button type="button" onClick={onClose} className="btn-secondary">
+                        Cancel
+                    </button>
+                    <button type="submit" disabled={loading} className="btn-primary">
+                        {loading ? 'Transferring...' : 'Transfer'}
                     </button>
                 </div>
             </form>

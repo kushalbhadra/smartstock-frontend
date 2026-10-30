@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
 import { userApi } from '../api/userApi';
 import { warehouseApi } from '../api/warehouseApi';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/Badge';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { TableWrap, Td, Th } from '../components/Table';
+import { getApiErrorMessage } from '../utils/apiError';
 import type { Role, User, Warehouse } from '../types';
 
 const ROLE_TONE: Record<Role, 'indigo'|'green'|'slate'> = {
@@ -19,15 +20,18 @@ const ROLE_TONE: Record<Role, 'indigo'|'green'|'slate'> = {
 
 export default function UsersPage() {
     const { userId } = useAuth();
-    const toast = useToast();
+    const { error: showError, success: showSuccess } = useToast();
 
     const [users, setUsers]           = useState<User[] | null>(null);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [showAdd, setShowAdd]       = useState(false);
     const [editItem, setEditItem]     = useState<User | null>(null);
     const [deleteItem, setDeleteItem] = useState<User | null>(null);
+    const [search, setSearch]         = useState('');
+    const [roleFilter, setRoleFilter] = useState<Role | 'ALL'>('ALL');
+    const [warehouseFilter, setWarehouseFilter] = useState('ALL');
 
-    const load = async () => {
+    const load = useCallback(async () => {
         try {
             const [u, w] = await Promise.all([
                 userApi.getAll(),
@@ -36,21 +40,23 @@ export default function UsersPage() {
             setUsers(u);
             setWarehouses(w);
         } catch {
-            toast.error('Failed to load users');
+            showError('Failed to load users');
         }
-    };
+    }, [showError]);
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        void Promise.resolve().then(load);
+    }, [load]);
 
     const handleDelete = async () => {
         if (!deleteItem) return;
         try {
             await userApi.delete(deleteItem.id);
-            toast.success('User deleted');
+            showSuccess('User deleted');
             setDeleteItem(null);
             await load();
-        } catch {
-            toast.error('Delete failed');
+        } catch (error) {
+            showError(getApiErrorMessage(error, 'Delete failed'));
         }
     };
 
@@ -59,12 +65,26 @@ export default function UsersPage() {
         return warehouses.find(w => w.id === wId)?.name ?? '—';
     };
 
+    const filteredUsers = users?.filter(user => {
+        const query = search.trim().toLowerCase();
+        const matchesSearch = !query
+            || user.name.toLowerCase().includes(query)
+            || user.email.toLowerCase().includes(query);
+        const matchesRole = roleFilter === 'ALL'
+            || user.role === roleFilter;
+        const matchesWarehouse = warehouseFilter === 'ALL'
+            || (warehouseFilter === 'UNASSIGNED'
+                ? user.warehouseId === null
+                : user.warehouseId === Number(warehouseFilter));
+        return matchesSearch && matchesRole && matchesWarehouse;
+    }) ?? [];
+
     return (
         <>
             <PageHeader
                 eyebrow="Administration"
                 title="Users & Access"
-                description="Manage user accounts and role assignments."
+                description="Manage accounts, role access, and warehouse assignments."
                 actions={
                     <button
                         onClick={() => setShowAdd(true)}
@@ -76,6 +96,51 @@ export default function UsersPage() {
                 }
             />
 
+            {users && users.length > 0 && (
+                <div className="card mb-4 p-4 grid gap-3 md:grid-cols-[minmax(220px,1fr)_180px_200px]">
+                    <label className="relative block">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                            type="search"
+                            value={search}
+                            onChange={event => setSearch(event.target.value)}
+                            className="input pl-9"
+                            placeholder="Search name or email"
+                            aria-label="Search users by name or email"
+                        />
+                    </label>
+                    <select
+                        value={roleFilter}
+                        onChange={event =>
+                            setRoleFilter(event.target.value as Role | 'ALL')
+                        }
+                        className="input"
+                        aria-label="Filter users by role"
+                    >
+                        <option value="ALL">All roles</option>
+                        <option value="ADMIN">Admin</option>
+                        <option value="WAREHOUSE_MGR">Warehouse Manager</option>
+                        <option value="VIEWER">Viewer</option>
+                    </select>
+                    <select
+                        value={warehouseFilter}
+                        onChange={event =>
+                            setWarehouseFilter(event.target.value)
+                        }
+                        className="input"
+                        aria-label="Filter users by warehouse"
+                    >
+                        <option value="ALL">All warehouses</option>
+                        <option value="UNASSIGNED">No warehouse assigned</option>
+                        {warehouses.map(warehouse => (
+                            <option key={warehouse.id} value={warehouse.id}>
+                                {warehouse.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
             <div className="card">
                 {!users ? (
                     <TableSkeleton cols={6} />
@@ -84,6 +149,12 @@ export default function UsersPage() {
                         icon={Users}
                         title="No users yet"
                         message="Add users to control system access."
+                    />
+                ) : filteredUsers.length === 0 ? (
+                    <EmptyState
+                        icon={Search}
+                        title="No matching users"
+                        message="Try a different search or filter."
                     />
                 ) : (
                     <TableWrap>
@@ -98,7 +169,7 @@ export default function UsersPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {users.map(u => (
+                            {filteredUsers.map(u => (
                                 <tr
                                     key={u.id}
                                     className="hover:bg-slate-50/60
@@ -250,6 +321,9 @@ function UserFormModal({
             [name]: name === 'warehouseId'
                 ? value ? parseInt(value) : null
                 : value,
+            ...(name === 'role' && value !== 'WAREHOUSE_MGR'
+                ? { warehouseId: null }
+                : {}),
         }));
     };
 
@@ -261,6 +335,10 @@ function UserFormModal({
         }
         if (form.role === 'WAREHOUSE_MGR' && !form.warehouseId) {
             toast.error('Warehouse manager must be assigned a warehouse');
+            return;
+        }
+        if (form.password && form.password.length < 8) {
+            toast.error('Password must be at least 8 characters');
             return;
         }
         setLoading(true);
@@ -278,8 +356,8 @@ function UserFormModal({
                 toast.success('User created');
             }
             onSaved();
-        } catch {
-            toast.error('Save failed');
+        } catch (error) {
+            toast.error(getApiErrorMessage(error, 'Save failed'));
         } finally {
             setLoading(false);
         }
@@ -320,19 +398,25 @@ function UserFormModal({
                     )}
                 </div>
 
-                {!isEdit && (
-                    <div>
-                        <label className="label">Password *</label>
-                        <input
-                            name="password"
-                            type="password"
-                            value={form.password}
-                            onChange={handleChange}
-                            className="input"
-                            placeholder="Minimum 8 characters"
-                        />
-                    </div>
-                )}
+                <div>
+                    <label className="label">
+                        {isEdit ? 'Set new password (optional)' : 'Password *'}
+                    </label>
+                    <input
+                        name="password"
+                        type="password"
+                        value={form.password}
+                        onChange={handleChange}
+                        className="input"
+                        placeholder={
+                            isEdit
+                                ? 'Leave blank to keep current password'
+                                : 'Minimum 8 characters'
+                        }
+                        minLength={8}
+                        required={!isEdit}
+                    />
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>

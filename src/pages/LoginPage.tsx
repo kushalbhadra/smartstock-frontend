@@ -1,24 +1,18 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronRight, ShieldCheck } from 'lucide-react';
+import { ChevronRight, Package, ShieldCheck } from 'lucide-react';
 import { authApi } from '../api/authApi';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
-
-// Demo accounts for quick testing
-const DEMO_ACCOUNTS = [
-    { label: 'Admin',   email: 'admin@smartstock.com' },
-    { label: 'Manager', email: 'priya@smartstock.com' },
-    { label: 'Viewer',  email: 'sneha@smartstock.com' },
-];
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../context/useToast';
+import { getApiErrorMessage } from '../utils/apiError';
 
 export default function LoginPage() {
     const { token, login } = useAuth();
     const navigate = useNavigate();
     const toast = useToast();
 
-    const [email, setEmail] = useState('admin@smartstock.com');
-    const [password, setPassword] = useState('demo1234');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
     // Already logged in → redirect to dashboard
@@ -30,7 +24,10 @@ export default function LoginPage() {
         e.preventDefault();
         setLoading(true);
         try {
-            const response = await authApi.login({ email, password });
+            const response = await authApi.login({
+                email: email.trim(),
+                password,
+            });
             login(
                 response.token,
                 response.userId,
@@ -41,11 +38,11 @@ export default function LoginPage() {
             );
             toast.success(`Welcome back, ${response.name}!`);
             navigate('/');
-        } catch (err: unknown) {
-            const message = err instanceof Error
-                ? err.message
-                : 'Invalid email or password';
-            toast.error(message);
+        } catch (error: unknown) {
+            toast.error(getApiErrorMessage(
+                error,
+                'Unable to reach the SmartStock server. Check that the backend is running and try again.'
+            ));
         } finally {
             setLoading(false);
         }
@@ -68,7 +65,7 @@ export default function LoginPage() {
                                 gap-3 mb-9">
                     <div className="w-11 h-11 bg-indigo-600 rounded-2xl
                                     flex items-center justify-center">
-                        <BarChart3 className="w-6 h-6 text-white" />
+                        <Package className="w-6 h-6 text-white" />
                     </div>
                     <span className="text-white font-bold text-2xl
                                      tracking-tight">
@@ -154,28 +151,10 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    {/* Demo accounts */}
-                    <div className="mt-6 pt-5 border-t border-slate-100
-                                    text-center">
+                    <div className="mt-6 border-t border-slate-100 pt-5 text-center">
                         <p className="text-xs text-slate-400">
-                            Demo accounts use password{' '}
-                            <strong className="text-slate-600">
-                                demo1234
-                            </strong>
+                            Sign in with the account provided by your workspace administrator.
                         </p>
-                        <div className="flex justify-center gap-3
-                                        mt-2 text-[11px]">
-                            {DEMO_ACCOUNTS.map(account => (
-                                <button
-                                    key={account.email}
-                                    onClick={() => setEmail(account.email)}
-                                    className="text-indigo-600
-                                               hover:underline"
-                                >
-                                    {account.label}
-                                </button>
-                            ))}
-                        </div>
                     </div>
                 </div>
 

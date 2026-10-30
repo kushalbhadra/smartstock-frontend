@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
 import { alertApi } from '../api/alertApi';
-import { useToast } from '../context/ToastContext';
+import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
@@ -25,7 +25,7 @@ const STATUS_TONE: Record<AlertStatus,
 };
 
 export default function AlertsPage() {
-    const toast = useToast();
+    const { error: showError } = useToast();
 
     const [alerts, setAlerts]         = useState<AlertLog[] | null>(null);
     const [typeFilter, setTypeFilter] = useState('All');
@@ -34,8 +34,8 @@ export default function AlertsPage() {
     useEffect(() => {
         alertApi.getAll()
             .then(setAlerts)
-            .catch(() => toast.error('Failed to load alerts'));
-    }, []);
+            .catch(() => showError('Failed to load alerts'));
+    }, [showError]);
 
     const filtered = alerts?.filter(a => {
         const matchType =
@@ -57,8 +57,8 @@ export default function AlertsPage() {
         <>
             <PageHeader
                 eyebrow="Notifications"
-                title="WhatsApp Alerts"
-                description="History of alerts sent via WhatsApp."
+                title="Legacy Alert Delivery History"
+                description="Historical notification delivery records retained from previous integrations."
                 actions={
                     <div className="flex gap-3">
                         <select
@@ -117,7 +117,7 @@ export default function AlertsPage() {
                     <EmptyState
                         icon={Zap}
                         title="No alerts yet"
-                        message="WhatsApp alert history will appear here."
+                        message="No historical alert delivery records are available."
                     />
                 ) : (
                     <TableWrap>

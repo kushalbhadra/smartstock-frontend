@@ -1,26 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Boxes, Download } from 'lucide-react';
 import { stockApi } from '../api/stockApi';
 import { warehouseApi } from '../api/warehouseApi';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { TableWrap, Td, Th } from '../components/Table';
 import { downloadBlob } from '../utils/excel';
 import { fmt, getStockStatus } from '../utils/format';
-import type { Stock, Warehouse } from '../types';
+import type { Stock, StockStatus, Warehouse } from '../types';
 
 export default function StockPage() {
-    const { isManager, warehouseId } = useAuth();
-    const toast = useToast();
+    const { isAdmin, isManager, warehouseId } = useAuth();
+    const { error: showError, success: showSuccess } = useToast();
+    const [searchParams] = useSearchParams();
+    const focusStockId = Number(searchParams.get('stockId'));
 
     const [stocks, setStocks]             = useState<Stock[] | null>(null);
     const [warehouses, setWarehouses]     = useState<Warehouse[]>([]);
     const [warehouseFilter, setWarehouseFilter] = useState<string>('All');
+    const [statusFilter, setStatusFilter] = useState<StockStatus | 'All'>('All');
+    const [search, setSearch] = useState('');
 
-    const load = async () => {
+    const load = useCallback(async () => {
         try {
             // Managers see only their warehouse
             const [s, w] = await Promise.all([
@@ -32,39 +37,41 @@ export default function StockPage() {
             setStocks(s);
             setWarehouses(w);
         } catch {
-            toast.error('Failed to load stock levels');
+            showError('Failed to load stock levels');
         }
-    };
+    }, [isManager, showError, warehouseId]);
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        void Promise.resolve().then(load);
+    }, [load]);
 
     const handleExport = async () => {
         try {
             const blob = await stockApi.exportStocks();
             downloadBlob(blob, 'stock-levels.xlsx');
-            toast.success('Stock levels exported');
+            showSuccess('Stock levels exported');
         } catch {
-            toast.error('Export failed');
+            showError('Export failed');
         }
     };
 
     // Filter by warehouse dropdown
     const filtered = stocks?.filter(s => {
-        if (warehouseFilter === 'All') return true;
-        return s.warehouse?.name === warehouseFilter;
+        if (focusStockId && s.id !== focusStockId) return false;
+        if (warehouseFilter !== 'All'
+            && s.warehouseName !== warehouseFilter) return false;
+        const status = getStockStatus(
+            s.quantity, s.minQuantity, s.maxQuantity
+        ).label;
+        if (statusFilter !== 'All' && status !== statusFilter) return false;
+        return !search || `${s.productName} ${s.sku} ${s.warehouseName}`
+            .toLowerCase().includes(search.toLowerCase());
     }) ?? [];
 
     // Stats for summary row
-    const criticalCount = filtered.filter(
-        s => s.quantity < s.minQuantity * 0.5
-    ).length;
-    const lowCount = filtered.filter(
-        s => s.quantity >= s.minQuantity * 0.5 &&
-             s.quantity < s.minQuantity
-    ).length;
-    const okCount = filtered.filter(
-        s => s.quantity >= s.minQuantity &&
-             s.quantity <= s.maxQuantity
+    const statusCount = (label: StockStatus) => filtered.filter(s =>
+        getStockStatus(s.quantity, s.minQuantity, s.maxQuantity).label
+            === label
     ).length;
 
     return (
@@ -92,33 +99,59 @@ export default function StockPage() {
                                 ))}
                             </select>
                         )}
-                        <button
-                            onClick={handleExport}
-                            className="btn-secondary"
+                        <input
+                            value={search}
+                            onChange={event => setSearch(event.target.value)}
+                            className="input sm:max-w-[200px]"
+                            placeholder="Search product or SKU"
+                        />
+                        <select
+                            value={statusFilter}
+                            onChange={event => setStatusFilter(
+                                event.target.value as StockStatus | 'All'
+                            )}
+                            className="input sm:max-w-[160px]"
                         >
-                            <Download className="w-4 h-4" />
-                            Export
-                        </button>
+                            <option value="All">All statuses</option>
+                            <option value="OK">OK</option>
+                            <option value="LOW">Low</option>
+                            <option value="CRITICAL">Critical</option>
+                            <option value="OVERSTOCK">Overstock</option>
+                        </select>
+                        {isAdmin && (
+                            <button
+                                onClick={handleExport}
+                                className="btn-secondary"
+                            >
+                                <Download className="w-4 h-4" />
+                                Export
+                            </button>
+                        )}
                     </>
                 }
             />
 
             {/* ── SUMMARY CARDS ───────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-4 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
                 <SummaryCard
                     label="OK"
-                    count={okCount}
+                    count={statusCount('OK')}
                     tone="green"
                 />
                 <SummaryCard
                     label="Low"
-                    count={lowCount}
+                    count={statusCount('LOW')}
                     tone="yellow"
                 />
                 <SummaryCard
                     label="Critical"
-                    count={criticalCount}
+                    count={statusCount('CRITICAL')}
                     tone="red"
+                />
+                <SummaryCard
+                    label="Overstock"
+                    count={statusCount('OVERSTOCK')}
+                    tone="purple"
                 />
             </div>
 
@@ -152,10 +185,16 @@ export default function StockPage() {
                                     s.minQuantity,
                                     s.maxQuantity
                                 );
-                                const fillPct = Math.min(
-                                    100,
-                                    Math.round(
+                                const fillPct = s.maxQuantity > 0
+                                    ? Math.round(
                                         (s.quantity / s.maxQuantity) * 100
+                                    )
+                                    : null;
+                                const progressWidth = Math.min(
+                                    100,
+                                    Math.max(
+                                        0,
+                                        fillPct ?? (s.quantity > 0 ? 100 : 0)
                                     )
                                 );
                                 const tone = {
@@ -173,14 +212,14 @@ export default function StockPage() {
                                         <Td>
                                             <span className="font-medium
                                                              text-slate-800">
-                                                {s.product?.name ?? '—'}
+                                                {s.productName}
                                             </span>
                                             <p className="text-xs
                                                           text-slate-400">
-                                                {s.product?.sku}
+                                                {s.sku}
                                             </p>
                                         </Td>
-                                        <Td>{s.warehouse?.name ?? '—'}</Td>
+                                        <Td>{s.warehouseName}</Td>
                                         <Td>
                                             <span className="font-bold
                                                              text-slate-800 text-base">
@@ -216,13 +255,15 @@ export default function StockPage() {
                                                                 ? 'bg-purple-400'
                                                                 : 'bg-emerald-400'
                                                         }`}
-                                                        style={{ width: `${fillPct}%` }}
+                                                        style={{ width: `${progressWidth}%` }}
                                                     />
                                                 </div>
                                                 <span className="text-xs
                                                                  text-slate-400
                                                                  w-8 text-right">
-                                                    {fillPct}%
+                                                    {fillPct === null
+                                                        ? 'N/A'
+                                                        : `${fillPct}%`}
                                                 </span>
                                             </div>
                                         </Td>
@@ -242,17 +283,19 @@ export default function StockPage() {
 function SummaryCard({ label, count, tone }: {
     label: string;
     count: number;
-    tone: 'green' | 'yellow' | 'red';
+    tone: 'green' | 'yellow' | 'red' | 'purple';
 }) {
     const styles = {
         green:  'bg-emerald-50 border-emerald-200 text-emerald-700',
         yellow: 'bg-amber-50 border-amber-200 text-amber-700',
         red:    'bg-rose-50 border-rose-200 text-rose-700',
+        purple: 'bg-purple-50 border-purple-200 text-purple-700',
     };
     const barStyles = {
         green:  'bg-emerald-400',
         yellow: 'bg-amber-400',
         red:    'bg-rose-400',
+        purple: 'bg-purple-400',
     };
 
     return (

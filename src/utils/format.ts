@@ -1,3 +1,5 @@
+import type { StockStatus } from '../types';
+
 // Format number in Indian style: 1,00,000
 export const fmt = (n: number): string =>
     new Intl.NumberFormat('en-IN').format(n);
@@ -48,12 +50,14 @@ export const getStockStatus = (
     quantity: number,
     minQty: number,
     maxQty: number
-): { label: string; color: string } => {
+): { label: StockStatus; color: string } => {
+    if (quantity <= 0)
+        return { label: 'CRITICAL', color: 'red' };
+    if (quantity > maxQty)
+        return { label: 'OVERSTOCK', color: 'purple' };
     if (quantity < minQty * 0.5)
         return { label: 'CRITICAL', color: 'red' };
     if (quantity < minQty)
         return { label: 'LOW', color: 'yellow' };
-    if (quantity > maxQty)
-        return { label: 'OVERSTOCK', color: 'purple' };
     return { label: 'OK', color: 'green' };
 };
