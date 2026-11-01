@@ -5,6 +5,7 @@ import { authApi } from '../api/authApi';
 import { useAuth } from '../context/useAuth';
 import { useToast } from '../context/useToast';
 import { getApiErrorMessage } from '../utils/apiError';
+import { normalizeEmail, validateEmail } from '../utils/contactValidation';
 
 export default function LoginPage() {
     const { token, login } = useAuth();
@@ -14,6 +15,7 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [emailError, setEmailError] = useState<string>();
 
     // Already logged in → redirect to dashboard
     useEffect(() => {
@@ -22,10 +24,14 @@ export default function LoginPage() {
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
+        const validationError = validateEmail(email, true);
+        setEmailError(validationError);
+        if (validationError) return;
+
         setLoading(true);
         try {
             const response = await authApi.login({
-                email: email.trim(),
+                email: normalizeEmail(email),
                 password,
             });
             login(
@@ -88,7 +94,8 @@ export default function LoginPage() {
                     </p>
 
                     {/* Form */}
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                    <form onSubmit={handleSubmit}
+                        className="space-y-5" noValidate>
                         <label className="block">
                             <span className="block text-xs font-semibold
                                              text-slate-600 mb-2">
@@ -97,17 +104,32 @@ export default function LoginPage() {
                             <input
                                 type="email"
                                 required
+                                autoComplete="email"
                                 value={email}
-                                onChange={e => setEmail(e.target.value)}
-                                placeholder="you@company.com"
-                                className="w-full rounded-lg border
+                                onChange={e => {
+                                    setEmail(e.target.value);
+                                    setEmailError(undefined);
+                                }}
+                                placeholder="example@gmail.com"
+                                aria-invalid={!!emailError}
+                                aria-describedby={emailError
+                                    ? 'login-email-error' : undefined}
+                                className={`w-full rounded-lg border
                                            border-slate-200 bg-white
                                            px-3 py-2.5 text-sm
                                            text-slate-800 outline-none
                                            focus:border-indigo-500
                                            focus:ring-2
-                                           focus:ring-indigo-100"
+                                           focus:ring-indigo-100
+                                           ${emailError
+                                               ? 'border-rose-500' : ''}`}
                             />
+                            {emailError && (
+                                <span id="login-email-error" role="alert"
+                                    className="mt-1 block text-xs text-rose-600">
+                                    {emailError}
+                                </span>
+                            )}
                         </label>
 
                         <label className="block">

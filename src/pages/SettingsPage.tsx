@@ -7,6 +7,12 @@ import { PageLoader } from '../components/ui/Spinner';
 import { useAuth } from '../context/useAuth';
 import { useToast } from '../context/useToast';
 import { getApiErrorMessage } from '../utils/apiError';
+import {
+    normalizeEmail,
+    normalizeIndianPhone,
+    validateEmail,
+    validateIndianPhone,
+} from '../utils/contactValidation';
 import type { SystemSettings, User, UserProfileRequest } from '../types';
 
 const EMPTY_PROFILE: UserProfileRequest = {
@@ -29,6 +35,11 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [savingProfile, setSavingProfile] = useState(false);
     const [savingSettings, setSavingSettings] = useState(false);
+    const [profilePhoneError, setProfilePhoneError] = useState<string>();
+    const [contactErrors, setContactErrors] = useState<{
+        email?: string;
+        phone?: string;
+    }>({});
 
     useEffect(() => {
         const loadSettings = async () => {
@@ -52,9 +63,16 @@ export default function SettingsPage() {
 
     const handleProfileSubmit = async (event: FormEvent) => {
         event.preventDefault();
+        const phoneError = validateIndianPhone(profile.phone);
+        setProfilePhoneError(phoneError);
+        if (phoneError) return;
+
         setSavingProfile(true);
         try {
-            const saved = await userApi.updateCurrentProfile(profile);
+            const saved = await userApi.updateCurrentProfile({
+                ...profile,
+                phone: normalizeIndianPhone(profile.phone),
+            });
             setProfile(toProfileForm(saved));
             updateProfile(saved.name, saved.phone);
             showSuccess('Profile saved');
@@ -78,10 +96,20 @@ export default function SettingsPage() {
             showError('Default low-stock threshold must be zero or greater');
             return;
         }
+        const emailError = validateEmail(settings.contactEmail ?? '');
+        const phoneError = validateIndianPhone(settings.contactPhone ?? '');
+        setContactErrors({ email: emailError, phone: phoneError });
+        if (emailError || phoneError) return;
 
         setSavingSettings(true);
         try {
-            const saved = await settingsApi.update(settings);
+            const saved = await settingsApi.update({
+                ...settings,
+                contactEmail: normalizeEmail(settings.contactEmail ?? ''),
+                contactPhone: normalizeIndianPhone(
+                    settings.contactPhone ?? ''
+                ),
+            });
             setSettings(saved);
             showSuccess('Company and inventory settings saved');
         } catch (error) {
@@ -119,7 +147,8 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                    <form onSubmit={handleProfileSubmit} className="space-y-4">
+                    <form onSubmit={handleProfileSubmit}
+                        className="space-y-4" noValidate>
                         <div>
                             <label className="label" htmlFor="profile-name">
                                 Full name
@@ -148,9 +177,22 @@ export default function SettingsPage() {
                                     ...prev,
                                     phone: event.target.value,
                                 }))}
-                                className="input"
-                                placeholder="+91-9876543210"
+                                onInput={() =>
+                                    setProfilePhoneError(undefined)}
+                                className={`input ${profilePhoneError
+                                    ? 'border-rose-500' : ''}`}
+                                placeholder="9876543210"
+                                autoComplete="tel"
+                                aria-invalid={!!profilePhoneError}
+                                aria-describedby={profilePhoneError
+                                    ? 'profile-phone-error' : undefined}
                             />
+                            {profilePhoneError && (
+                                <p id="profile-phone-error" role="alert"
+                                    className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                                    {profilePhoneError}
+                                </p>
+                            )}
                         </div>
 
                         <div className="flex justify-end pt-2">
@@ -181,7 +223,8 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                    <form onSubmit={handleSystemSubmit} className="space-y-4">
+                    <form onSubmit={handleSystemSubmit}
+                        className="space-y-4" noValidate>
                         <div>
                             <label className="label" htmlFor="company-name">
                                 Company name
@@ -209,8 +252,23 @@ export default function SettingsPage() {
                                     ...prev,
                                     contactEmail: event.target.value,
                                 }))}
-                                className="input"
+                                onInput={() => setContactErrors(prev => ({
+                                    ...prev, email: undefined,
+                                }))}
+                                className={`input ${contactErrors.email
+                                    ? 'border-rose-500' : ''}`}
+                                placeholder="example@gmail.com"
+                                autoComplete="email"
+                                aria-invalid={!!contactErrors.email}
+                                aria-describedby={contactErrors.email
+                                    ? 'company-email-error' : undefined}
                             />
+                            {contactErrors.email && (
+                                <p id="company-email-error" role="alert"
+                                    className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                                    {contactErrors.email}
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="label" htmlFor="company-phone">
@@ -224,8 +282,23 @@ export default function SettingsPage() {
                                     ...prev,
                                     contactPhone: event.target.value,
                                 }))}
-                                className="input"
+                                onInput={() => setContactErrors(prev => ({
+                                    ...prev, phone: undefined,
+                                }))}
+                                className={`input ${contactErrors.phone
+                                    ? 'border-rose-500' : ''}`}
+                                placeholder="9876543210"
+                                autoComplete="tel"
+                                aria-invalid={!!contactErrors.phone}
+                                aria-describedby={contactErrors.phone
+                                    ? 'company-phone-error' : undefined}
                             />
+                            {contactErrors.phone && (
+                                <p id="company-phone-error" role="alert"
+                                    className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                                    {contactErrors.phone}
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="label" htmlFor="default-threshold">

@@ -11,6 +11,12 @@ import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { TableWrap, Td, Th } from '../components/Table';
 import { getApiErrorMessage } from '../utils/apiError';
 import { money } from '../utils/format';
+import {
+    normalizeEmail,
+    normalizeIndianPhone,
+    validateEmail,
+    validateIndianPhone,
+} from '../utils/contactValidation';
 import type { PurchaseOrder, Supplier } from '../types';
 
 // Star rating display component
@@ -286,11 +292,21 @@ function SupplierFormModal({
         active:       supplier?.active ?? true,
     });
     const [loading, setLoading] = useState(false);
+    const [contactErrors, setContactErrors] = useState<{
+        email?: string;
+        phone?: string;
+    }>({});
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
     ) => {
         const { name, value } = e.target;
+        if (name === 'contactEmail' || name === 'phone') {
+            setContactErrors(prev => ({
+                ...prev,
+                [name === 'contactEmail' ? 'email' : 'phone']: undefined,
+            }));
+        }
         setForm(prev => ({
             ...prev,
             [name]: name === 'rating'
@@ -305,13 +321,23 @@ function SupplierFormModal({
             toast.error('Supplier name is required');
             return;
         }
+        const emailError = validateEmail(form.contactEmail);
+        const phoneError = validateIndianPhone(form.phone);
+        setContactErrors({ email: emailError, phone: phoneError });
+        if (emailError || phoneError) return;
+
         setLoading(true);
         try {
+            const request = {
+                ...form,
+                contactEmail: normalizeEmail(form.contactEmail),
+                phone: normalizeIndianPhone(form.phone),
+            };
             if (isEdit && supplier) {
-                await supplierApi.update(supplier.id, form);
+                await supplierApi.update(supplier.id, request);
                 toast.success('Supplier updated');
             } else {
-                await supplierApi.create(form);
+                await supplierApi.create(request);
                 toast.success('Supplier created');
             }
             onSaved();
@@ -327,7 +353,7 @@ function SupplierFormModal({
             title={isEdit ? 'Edit Supplier' : 'Add Supplier'}
             onClose={onClose}
         >
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
                 <div>
                     <label className="label">Supplier Code</label>
                     <input
@@ -354,21 +380,44 @@ function SupplierFormModal({
                     <input
                         name="contactEmail"
                         type="email"
+                        autoComplete="email"
                         value={form.contactEmail}
                         onChange={handleChange}
-                        className="input"
-                        placeholder="supplier@company.com"
+                        className={`input ${contactErrors.email
+                            ? 'border-rose-500' : ''}`}
+                        placeholder="example@gmail.com"
+                        aria-invalid={!!contactErrors.email}
+                        aria-describedby={contactErrors.email
+                            ? 'supplier-email-error' : undefined}
                     />
+                    {contactErrors.email && (
+                        <p id="supplier-email-error" role="alert"
+                            className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                            {contactErrors.email}
+                        </p>
+                    )}
                 </div>
                 <div>
                     <label className="label">Phone</label>
                     <input
                         name="phone"
+                        type="tel"
+                        autoComplete="tel"
                         value={form.phone}
                         onChange={handleChange}
-                        className="input"
-                        placeholder="+91-9876543210"
+                        className={`input ${contactErrors.phone
+                            ? 'border-rose-500' : ''}`}
+                        placeholder="9876543210"
+                        aria-invalid={!!contactErrors.phone}
+                        aria-describedby={contactErrors.phone
+                            ? 'supplier-phone-error' : undefined}
                     />
+                    {contactErrors.phone && (
+                        <p id="supplier-phone-error" role="alert"
+                            className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                            {contactErrors.phone}
+                        </p>
+                    )}
                 </div>
                 <div>
                     <label className="label">Contact Person</label>

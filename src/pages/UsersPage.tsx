@@ -11,6 +11,12 @@ import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { TableWrap, Td, Th } from '../components/Table';
 import { getApiErrorMessage } from '../utils/apiError';
+import {
+    normalizeEmail,
+    normalizeIndianPhone,
+    validateEmail,
+    validateIndianPhone,
+} from '../utils/contactValidation';
 import type { Role, User, Warehouse } from '../types';
 
 const ROLE_TONE: Record<Role, 'indigo'|'green'|'slate'> = {
@@ -315,11 +321,18 @@ function UserFormModal({
         password:    '',
     });
     const [loading, setLoading] = useState(false);
+    const [contactErrors, setContactErrors] = useState<{
+        email?: string;
+        phone?: string;
+    }>({});
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
     ) => {
         const { name, value } = e.target;
+        if (name === 'email' || name === 'phone') {
+            setContactErrors(prev => ({ ...prev, [name]: undefined }));
+        }
         setForm(prev => ({
             ...prev,
             [name]: name === 'warehouseId'
@@ -333,10 +346,14 @@ function UserFormModal({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.name.trim() || !form.email.trim()) {
-            toast.error('Name and email are required');
+        if (!form.name.trim()) {
+            toast.error('Name is required');
             return;
         }
+        const emailError = validateEmail(form.email, true);
+        const phoneError = validateIndianPhone(form.phone);
+        setContactErrors({ email: emailError, phone: phoneError });
+        if (emailError || phoneError) return;
         if (form.role === 'WAREHOUSE_MGR' && !form.warehouseId) {
             toast.error('Warehouse manager must be assigned a warehouse');
             return;
@@ -347,8 +364,13 @@ function UserFormModal({
         }
         setLoading(true);
         try {
+            const request = {
+                ...form,
+                email: normalizeEmail(form.email),
+                phone: normalizeIndianPhone(form.phone),
+            };
             if (isEdit && user) {
-                await userApi.update(user.id, form);
+                await userApi.update(user.id, request);
                 toast.success('User updated');
             } else {
                 if (!form.password) {
@@ -356,7 +378,7 @@ function UserFormModal({
                     setLoading(false);
                     return;
                 }
-                await userApi.create(form);
+                await userApi.create(request);
                 toast.success('User created');
             }
             onSaved();
@@ -372,7 +394,7 @@ function UserFormModal({
             title={isEdit ? 'Edit User' : 'Add User'}
             onClose={onClose}
         >
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
                 <div>
                     <label className="label">Full Name *</label>
                     <input
@@ -389,12 +411,24 @@ function UserFormModal({
                     <input
                         name="email"
                         type="email"
+                        autoComplete="email"
+                        required
                         value={form.email}
                         onChange={handleChange}
-                        className="input"
+                        className={`input ${contactErrors.email
+                            ? 'border-rose-500' : ''}`}
                         disabled={isEdit}
-                        placeholder="user@company.com"
+                        placeholder="example@gmail.com"
+                        aria-invalid={!!contactErrors.email}
+                        aria-describedby={contactErrors.email
+                            ? 'user-email-error' : undefined}
                     />
+                    {contactErrors.email && (
+                        <p id="user-email-error" role="alert"
+                            className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                            {contactErrors.email}
+                        </p>
+                    )}
                     {isEdit && (
                         <p className="text-xs text-slate-400 mt-1">
                             Email cannot be changed
@@ -442,11 +476,23 @@ function UserFormModal({
                         <label className="label">Phone</label>
                         <input
                             name="phone"
+                            type="tel"
+                            autoComplete="tel"
                             value={form.phone}
                             onChange={handleChange}
-                            className="input"
-                            placeholder="+91-9876543210"
+                            className={`input ${contactErrors.phone
+                                ? 'border-rose-500' : ''}`}
+                            placeholder="9876543210"
+                            aria-invalid={!!contactErrors.phone}
+                            aria-describedby={contactErrors.phone
+                                ? 'user-phone-error' : undefined}
                         />
+                        {contactErrors.phone && (
+                            <p id="user-phone-error" role="alert"
+                                className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                                {contactErrors.phone}
+                            </p>
+                        )}
                     </div>
                 </div>
 
