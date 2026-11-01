@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, BarChart3, Download, Plus } from 'lucide-react';
 import { stockApi } from '../api/stockApi';
 import { productApi } from '../api/productApi';
-import { warehouseApi } from '../api/warehouseApi';
+import {
+    warehouseApi,
+    type WarehouseOption,
+} from '../api/warehouseApi';
 import { useAuth } from '../context/useAuth';
 import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
@@ -30,12 +34,21 @@ const TYPE_TONE: Record<MovementType, 'green' | 'red' | 'yellow' | 'blue' | 'pur
 export default function MovementsPage() {
     const { canMutate, isAdmin, isManager, warehouseId } = useAuth();
     const { error: showError, success: showSuccess } = useToast();
+    const [searchParams] = useSearchParams();
 
     const [movementPage, setMovementPage] = useState<StockMovementPage | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [products, setProducts]     = useState<Product[]>([]);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-    const [showAdd, setShowAdd]       = useState(false);
-    const [showTransfer, setShowTransfer] = useState(false);
+    const [transferWarehouses, setTransferWarehouses] =
+        useState<WarehouseOption[]>([]);
+    const [showAdd, setShowAdd] = useState(
+        () => searchParams.get('action') === 'add' && canMutate
+    );
+    const [showTransfer, setShowTransfer] = useState(
+        () => searchParams.get('action') === 'transfer'
+            && (isAdmin || isManager && warehouseId !== null)
+    );
     const [typeFilter, setTypeFilter] = useState('All');
     const [search, setSearch] = useState('');
     const [warehouseFilter, setWarehouseFilter] = useState('All');
@@ -45,7 +58,7 @@ export default function MovementsPage() {
 
     const load = useCallback(async () => {
         try {
-            const [movementResult, p, w] = await Promise.all([
+            const [movementResult, p, w, transferOptions] = await Promise.all([
                 stockApi.getHistory({
                     ...(typeFilter !== 'All'
                         ? { type: typeFilter } : {}),
@@ -59,14 +72,38 @@ export default function MovementsPage() {
                 }),
                 productApi.getAll(),
                 warehouseApi.getAll(),
+                isManager
+                    ? warehouseApi.getTransferDestinations()
+                    : Promise.resolve([]),
             ]);
             setMovementPage(movementResult);
+            setLoadError(null);
             setProducts(p);
             setWarehouses(w);
-        } catch {
-            showError('Failed to load movements');
+            setTransferWarehouses(isAdmin
+                ? w.map(warehouse => ({
+                    id: warehouse.id,
+                    name: warehouse.name,
+                }))
+                : transferOptions);
+        } catch (error) {
+            const message = getApiErrorMessage(
+                error,
+                'Failed to load movements. Please try again.'
+            );
+            setMovementPage({
+                content: [],
+                number: page,
+                totalPages: 0,
+                totalElements: 0,
+            });
+            setLoadError(message);
+            showError(message);
         }
-    }, [from, page, search, showError, to, typeFilter, warehouseFilter]);
+    }, [
+        from, isAdmin, isManager, page, search, showError, to, typeFilter,
+        warehouseFilter,
+    ]);
 
     useEffect(() => {
         void Promise.resolve().then(load);
@@ -164,13 +201,13 @@ export default function MovementsPage() {
                             />
                         </label>
 
-                        <button
+                        {(isAdmin || isManager) && <button
                             onClick={handleExport}
                             className="btn-secondary"
                         >
                             <Download className="w-4 h-4" />
                             Export
-                        </button>
+                        </button>}
 
                         {canMutate && (
                             <>
@@ -181,7 +218,7 @@ export default function MovementsPage() {
                                     <Plus className="w-4 h-4" />
                                     Record Movement
                                 </button>
-                                {isAdmin && <button
+                                {(isAdmin || isManager && warehouseId !== null) && <button
                                     onClick={() => setShowTransfer(true)}
                                     className="btn-primary"
                                 >
@@ -197,6 +234,10 @@ export default function MovementsPage() {
             <div className="card">
                 {!movementPage ? (
                     <TableSkeleton cols={9} />
+                ) : loadError ? (
+                    <div className="p-6 text-sm text-rose-600" role="alert">
+                        {loadError}
+                    </div>
                 ) : filtered.length === 0 ? (
                     <EmptyState
                         icon={BarChart3}
@@ -350,7 +391,7 @@ export default function MovementsPage() {
             {showTransfer && (
                 <TransferFormModal
                     products={products}
-                    warehouses={warehouses}
+                    warehouses={transferWarehouses}
                     defaultWarehouseId={isManager ? warehouseId ?? undefined : undefined}
                     onClose={() => setShowTransfer(false)}
                     onSaved={() => { setShowTransfer(false); void load(); }}
@@ -587,7 +628,7 @@ function TransferFormModal({
     onSaved,
 }: {
     products: Product[];
-    warehouses: Warehouse[];
+    warehouses: WarehouseOption[];
     defaultWarehouseId?: number;
     onClose: () => void;
     onSaved: () => void;

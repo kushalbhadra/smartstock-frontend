@@ -1,10 +1,22 @@
 import axiosInstance from './axiosInstance';
 import type { Warehouse } from '../types';
 
+export interface WarehouseOption {
+    id: number;
+    name: string;
+}
+
 export const warehouseApi = {
 
     getAll: async (): Promise<Warehouse[]> => {
         const response = await axiosInstance.get('/api/warehouses');
+        return response.data;
+    },
+
+    getTransferDestinations: async (): Promise<WarehouseOption[]> => {
+        const response = await axiosInstance.get(
+            '/api/warehouses/transfer-destinations'
+        );
         return response.data;
     },
 

@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, FileText } from 'lucide-react';
+import { useAuth } from '../context/useAuth';
 
 const DOCUMENTS = {
     '/privacy': {
@@ -39,21 +40,26 @@ const DOCUMENTS = {
 
 export default function LegalPage() {
     const { pathname } = useLocation();
+    const { token } = useAuth();
     const document = DOCUMENTS[pathname as keyof typeof DOCUMENTS]
         ?? DOCUMENTS['/privacy'];
 
     return (
-        <div className="min-h-screen bg-[#f7f8f5]">
-            <header className="border-b border-slate-200 bg-white">
-                <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4 sm:px-8">
-                    <Link to="/" className="font-bold tracking-tight text-slate-900">smartstock</Link>
-                    <Link to="/login" className="text-sm font-semibold text-emerald-800 hover:text-emerald-700">Sign in</Link>
-                </div>
-            </header>
+        <div className={token ? '' : 'min-h-screen bg-slate-50'}>
+            {!token && (
+                <header className="border-b border-slate-200 bg-white">
+                    <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4 sm:px-8">
+                        <Link to="/" className="font-bold tracking-tight text-slate-900">smartstock</Link>
+                        <Link to="/login" className="text-sm font-semibold text-emerald-800 hover:text-emerald-700">Sign in</Link>
+                    </div>
+                </header>
+            )}
             <main className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16">
-                <Link to="/" className="inline-flex items-center gap-2 text-sm text-slate-500 transition hover:text-emerald-800">
-                    <ArrowLeft className="h-4 w-4" /> Back to home
-                </Link>
+                {!token && (
+                    <Link to="/" className="inline-flex items-center gap-2 text-sm text-slate-500 transition hover:text-emerald-800">
+                        <ArrowLeft className="h-4 w-4" /> Back to home
+                    </Link>
+                )}
                 <div className="mt-9 flex items-start gap-4">
                     <span className="rounded-xl bg-emerald-50 p-3 text-emerald-800">
                         <FileText className="h-5 w-5" />

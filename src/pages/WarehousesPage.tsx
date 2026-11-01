@@ -21,7 +21,9 @@ export default function WarehousesPage() {
 
     const [warehouses, setWarehouses] = useState<Warehouse[] | null>(null);
     const [users, setUsers]           = useState<User[]>([]);
-    const [showAdd, setShowAdd]       = useState(false);
+    const [showAdd, setShowAdd] = useState(
+        () => searchParams.get('action') === 'add' && isAdmin
+    );
     const [editItem, setEditItem]     = useState<Warehouse | null>(null);
     const [deleteItem, setDeleteItem] = useState<Warehouse | null>(null);
 

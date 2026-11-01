@@ -103,6 +103,8 @@ export interface Product {
     price: number;
     storageCapacityFactor: number;
     createdAt?: string;
+    canDelete: boolean;
+    deletionBlockedReason: string | null;
 }
 
 export interface Stock {
@@ -174,6 +176,58 @@ export interface PurchaseOrder {
     expectedDate: string | null;
     createdBy: Pick<User, 'id' | 'name' | 'email'>;
     createdAt: string;
+    canApprove: boolean;
+}
+
+export interface DashboardSummary {
+    role: Role;
+    assignedWarehouseName: string | null;
+    canApprovePurchaseOrders: boolean;
+    totalProducts: number;
+    totalWarehouses: number;
+    totalStockUnits: number;
+    lowStockItems: number;
+    outOfStockItems: number;
+    overstockItems: number;
+    pendingPurchaseOrders: number;
+    movementsToday: number;
+    unreadNotifications: number;
+    warehouseDistribution: {
+        warehouseId: number;
+        warehouseName: string;
+        totalUnits: number;
+    }[];
+    movementTrend: {
+        date: string;
+        inbound: number;
+        outbound: number;
+    }[];
+    purchaseOrderStatuses: {
+        status: PurchaseOrderStatus;
+        count: number;
+    }[];
+    topMovingProducts: {
+        productId: number;
+        productName: string;
+        sku: string;
+        movementCount: number;
+        totalQuantity: number;
+    }[];
+    recentMovements: StockMovement[];
+    recentPurchaseOrders: PurchaseOrder[];
+    lowStockPreview: Stock[];
+    forecasts: {
+        id: number;
+        productId: number;
+        productName: string;
+        sku: string;
+        forecastNextWeek: number | null;
+        forecastNextMonth: number | null;
+        suggestedReorderQuantity: number | null;
+        anomalyDetected: boolean | null;
+        createdAt: string;
+    }[];
+    notifications: AppNotification[];
 }
 
 export interface DemandForecast {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Pencil, Plus, Star, Trash2, Truck } from 'lucide-react';
 import { supplierApi } from '../api/supplierApi';
 import { purchaseOrderApi } from '../api/purchaseOrderApi';
@@ -38,10 +39,13 @@ export default function SuppliersPage() {
     const { isAdmin } = useAuth();
     const { error } = useToast();
     const toast = useToast();
+    const [searchParams] = useSearchParams();
 
     const [suppliers, setSuppliers]   = useState<Supplier[] | null>(null);
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-    const [showAdd, setShowAdd]       = useState(false);
+    const [showAdd, setShowAdd] = useState(
+        () => searchParams.get('action') === 'add' && isAdmin
+    );
     const [editItem, setEditItem]     = useState<Supplier | null>(null);
     const [deleteItem, setDeleteItem] = useState<Supplier | null>(null);
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
 import { userApi } from '../api/userApi';
 import { warehouseApi } from '../api/warehouseApi';
@@ -21,10 +22,13 @@ const ROLE_TONE: Record<Role, 'indigo'|'green'|'slate'> = {
 export default function UsersPage() {
     const { userId } = useAuth();
     const { error: showError, success: showSuccess } = useToast();
+    const [searchParams] = useSearchParams();
 
     const [users, setUsers]           = useState<User[] | null>(null);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-    const [showAdd, setShowAdd]       = useState(false);
+    const [showAdd, setShowAdd] = useState(
+        () => searchParams.get('action') === 'add'
+    );
     const [editItem, setEditItem]     = useState<User | null>(null);
     const [deleteItem, setDeleteItem] = useState<User | null>(null);
     const [search, setSearch]         = useState('');

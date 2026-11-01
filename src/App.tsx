@@ -11,7 +11,6 @@ import MovementsPage from './pages/MovementsPage';
 import PurchaseOrdersPage from './pages/PurchaseOrdersPage';
 import SuppliersPage      from './pages/SuppliersPage';
 import ForecastsPage      from './pages/ForecastsPage';
-import AlertsPage         from './pages/AlertsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import UsersPage          from './pages/UsersPage';
 import SettingsPage       from './pages/SettingsPage';
@@ -42,15 +41,29 @@ function RequireAdmin({ children }: { children: ReactNode }) {
     return children;
 }
 
+function PublicInfoPage({ children }: { children: ReactNode }) {
+    const { token } = useAuth();
+    return token ? <AppShell>{children}</AppShell> : children;
+}
+
 export default function App() {
     return (
         <Routes>
             {/* Public */}
             <Route path="/" element={<HomeRoute />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/privacy" element={<LegalPage />} />
-            <Route path="/terms" element={<LegalPage />} />
-            <Route path="/help" element={<HelpPage />} />
+            <Route
+                path="/privacy"
+                element={<PublicInfoPage><LegalPage /></PublicInfoPage>}
+            />
+            <Route
+                path="/terms"
+                element={<PublicInfoPage><LegalPage /></PublicInfoPage>}
+            />
+            <Route
+                path="/help"
+                element={<PublicInfoPage><HelpPage /></PublicInfoPage>}
+            />
 
             {/* All protected routes live inside AppShell */}
             <Route element={<RequireAuth />}>
@@ -63,7 +76,7 @@ export default function App() {
                 <Route path="/forecasts" element={<ForecastsPage />} />
                 <Route
                     path="/alerts"
-                    element={<RequireAdmin><AlertsPage /></RequireAdmin>}
+                    element={<Navigate to="/notifications" replace />}
                 />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route

@@ -36,9 +36,12 @@ export default function ProductsPage() {
     // ── STATE ─────────────────────────────────────────────────────────
     const [products, setProducts]         = useState<Product[] | null>(null);
     const [allocations, setAllocations]   = useState<Stock[]>([]);
+    const [warehouses, setWarehouses]     = useState<Warehouse[]>([]);
     const [search, setSearch]             = useState('');
     const [categoryFilter, setCategoryFilter] = useState('All');
-    const [showAddModal, setShowAddModal] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(
+        () => searchParams.get('action') === 'add' && isAdmin
+    );
     const [editProduct, setEditProduct]   = useState<Product | null>(null);
     const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
     const [allocateProduct, setAllocateProduct] = useState<Product | null>(null);
@@ -47,17 +50,28 @@ export default function ProductsPage() {
 
     // ── LOAD ──────────────────────────────────────────────────────────
     const load = useCallback(async () => {
-        try {
-            const data = await productApi.getAll();
-            setProducts(data);
-            try {
-                setAllocations(await stockApi.getAll());
-            } catch {
-                showError('Products loaded, but stock allocations are unavailable');
-            }
-        } catch (error) {
+        const [productsResult, allocationsResult, warehousesResult] =
+            await Promise.allSettled([
+                productApi.getAll(),
+                stockApi.getAll(),
+                warehouseApi.getAll(),
+            ]);
+        if (productsResult.status === 'fulfilled') {
+            setProducts(productsResult.value);
+        } else {
+            const error = productsResult.reason;
             console.error('Failed to load products:', error);
             setProducts([]);
+        }
+        if (allocationsResult.status === 'fulfilled') {
+            setAllocations(allocationsResult.value);
+        } else {
+            showError('Products loaded, but stock allocations are unavailable');
+        }
+        if (warehousesResult.status === 'fulfilled') {
+            setWarehouses(warehousesResult.value);
+        } else {
+            showError('Products loaded, but warehouse occupancy is unavailable');
         }
     }, [showError]);
 
@@ -89,8 +103,8 @@ export default function ProductsPage() {
             showSuccess('Product deleted');
             setDeleteProduct(null);
             load();
-        } catch {
-            showError('Delete failed');
+        } catch (error) {
+            showError(getApiErrorMessage(error, 'Delete failed'));
         }
     };
 
@@ -309,15 +323,26 @@ export default function ProductsPage() {
                                                 >
                                                     <Pencil className="w-4 h-4" />
                                                 </button>
-                                                <button
-                                                    onClick={() => setDeleteProduct(p)}
-                                                    className="p-1.5 rounded-lg
-                                                               text-slate-400
-                                                               hover:text-rose-600
-                                                               hover:bg-rose-50"
+                                                <span
+                                                    title={p.deletionBlockedReason
+                                                        ?? 'Delete product'}
                                                 >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                    <button
+                                                        onClick={() => setDeleteProduct(p)}
+                                                        disabled={!p.canDelete}
+                                                        aria-label={`Delete ${p.name}`}
+                                                        className="p-1.5 rounded-lg
+                                                                   text-slate-400
+                                                                   hover:text-rose-600
+                                                                   hover:bg-rose-50
+                                                                   disabled:cursor-not-allowed
+                                                                   disabled:opacity-40
+                                                                   disabled:hover:bg-transparent
+                                                                   disabled:hover:text-slate-400"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </span>
                                             </div>
                                         </Td>
                                     )}
@@ -355,11 +380,10 @@ export default function ProductsPage() {
             {allocateProduct && (
                 <StockAllocationModal
                     product={allocateProduct}
+                    allocations={allocations}
+                    warehouses={warehouses}
                     onClose={() => setAllocateProduct(null)}
-                    onSaved={() => {
-                        setAllocateProduct(null);
-                        void load();
-                    }}
+                    onSaved={load}
                 />
             )}
         </>
@@ -776,29 +800,30 @@ function ProductFormModal({
 
 function StockAllocationModal({
     product,
+    allocations,
+    warehouses,
     onClose,
     onSaved,
 }: {
     product: Product;
+    allocations: Stock[];
+    warehouses: Warehouse[];
     onClose: () => void;
-    onSaved: () => void;
+    onSaved: () => Promise<void>;
 }) {
     const { error: showError, success: showSuccess } = useToast();
-    const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [warehouseId, setWarehouseId] = useState('');
     const [quantity, setQuantity] = useState('0');
     const [minQuantity, setMinQuantity] = useState('0');
     const [maxQuantity, setMaxQuantity] = useState('100');
     const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        warehouseApi.getAll()
-            .then(setWarehouses)
-            .catch(() => showError('Could not load warehouses'));
-    }, [showError]);
-
     const selectedWarehouse = warehouses.find(
         warehouse => warehouse.id === Number(warehouseId)
+    );
+    const alreadyAllocated = allocations.some(allocation =>
+        allocation.productId === product.id
+        && allocation.warehouseId === Number(warehouseId)
     );
     const projectedUsage = selectedWarehouse
         ? Number(selectedWarehouse.usedCapacity ?? 0)
@@ -818,6 +843,13 @@ function StockAllocationModal({
             showError('Allocation exceeds the selected warehouse capacity');
             return;
         }
+        if (alreadyAllocated) {
+            showError(
+                'This product already has a stock allocation in this warehouse. '
+                + 'Use an inbound stock movement to increase the quantity.'
+            );
+            return;
+        }
 
         setLoading(true);
         try {
@@ -828,8 +860,8 @@ function StockAllocationModal({
                 minQuantity: Number(minQuantity),
                 maxQuantity: Number(maxQuantity),
             });
+            await onSaved();
             showSuccess('Stock allocated to warehouse');
-            onSaved();
         } catch (error: unknown) {
             showError(getApiErrorMessage(error, 'Stock allocation failed'));
         } finally {
@@ -855,7 +887,19 @@ function StockAllocationModal({
                             </option>
                         ))}
                     </select>
+                    {warehouses.length === 0 && (
+                        <p className="mt-1 text-xs text-rose-600" role="alert">
+                            No warehouses are available for stock allocation.
+                        </p>
+                    )}
                 </div>
+                {alreadyAllocated && (
+                    <p className="text-sm text-rose-600" role="alert">
+                        This product already has a stock allocation in this
+                        warehouse. Use an inbound stock movement to increase
+                        the quantity.
+                    </p>
+                )}
                 <div className="grid grid-cols-3 gap-3">
                     <label>
                         <span className="label">Quantity</span>
@@ -900,9 +944,13 @@ function StockAllocationModal({
                 )}
                 <div className="flex justify-end gap-3">
                     <button type="button" onClick={onClose} className="btn-secondary">
-                        Cancel
+                        Close
                     </button>
-                    <button type="submit" disabled={loading} className="btn-primary">
+                    <button
+                        type="submit"
+                        disabled={loading || warehouses.length === 0 || alreadyAllocated}
+                        className="btn-primary"
+                    >
                         {loading ? 'Allocating...' : 'Allocate stock'}
                     </button>
                 </div>

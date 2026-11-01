@@ -3,15 +3,14 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
     BarChart3, Bell, Boxes, Building2, ClipboardList,
     LayoutDashboard, LogOut, Menu, Package, Settings,
-    Sparkles, Truck, Users, X, Zap, CircleHelp, ClipboardClock, Database,
+    Sparkles, Truck, Users, X, CircleHelp, ClipboardClock, Database,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { cx } from '../utils/format';
 import { Badge } from './ui/Badge';
 import { NotificationBell } from './NotificationBell';
 
-// Navigation items — shown to all authenticated users
-const NAV_ITEMS = [
+const ADMIN_NAV_ITEMS = [
     { to: '/',                label: 'Dashboard',       icon: LayoutDashboard },
     { to: '/products',        label: 'Products',        icon: Package },
     { to: '/warehouses',      label: 'Warehouses',      icon: Building2 },
@@ -24,11 +23,34 @@ const NAV_ITEMS = [
     { to: '/help',            label: 'Help & Support',  icon: CircleHelp },
 ];
 
-// Admin-only navigation items
+const MANAGER_NAV_ITEMS = [
+    { to: '/',                label: 'Dashboard',       icon: LayoutDashboard },
+    { to: '/products',        label: 'Products',        icon: Package },
+    { to: '/warehouses',      label: 'Assigned Warehouse', icon: Building2 },
+    { to: '/stock',           label: 'Stock Levels',    icon: Boxes },
+    { to: '/movements',       label: 'Stock Movements', icon: BarChart3 },
+    { to: '/purchase-orders', label: 'Purchase Orders', icon: ClipboardList },
+    { to: '/suppliers',       label: 'Suppliers',       icon: Truck },
+    { to: '/forecasts',       label: 'AI Forecasts',    icon: Sparkles },
+    { to: '/notifications',  label: 'Notifications',   icon: Bell },
+    { to: '/help',            label: 'Help & Support',  icon: CircleHelp },
+];
+
+const VIEWER_NAV_ITEMS = [
+    { to: '/',                label: 'Dashboard',       icon: LayoutDashboard },
+    { to: '/products',        label: 'Products',        icon: Package },
+    { to: '/warehouses',      label: 'Warehouses',      icon: Building2 },
+    { to: '/stock',           label: 'Stock Levels',    icon: Boxes },
+    { to: '/movements',       label: 'Stock Movements', icon: BarChart3 },
+    { to: '/purchase-orders', label: 'Purchase Orders', icon: ClipboardList },
+    { to: '/suppliers',       label: 'Suppliers',       icon: Truck },
+    { to: '/forecasts',       label: 'AI Forecasts',    icon: Sparkles },
+    { to: '/help',            label: 'Help & Support',  icon: CircleHelp },
+];
+
 const ADMIN_ITEMS = [
     { to: '/users',    label: 'Users & Access', icon: Users },
     { to: '/settings', label: 'Settings',       icon: Settings },
-    { to: '/alerts', label: 'Alert History', icon: Zap },
     { to: '/audit-log', label: 'Audit Log',      icon: ClipboardClock },
     { to: '/data',      label: 'Data & Retention', icon: Database },
 ];
@@ -56,6 +78,12 @@ export function AppShell({ children }: { children?: ReactNode }) {
         : role === 'WAREHOUSE_MGR'
         ? 'green'
         : 'slate';
+    const roleLabel = role === 'WAREHOUSE_MGR' ? 'MANAGER' : role;
+    const navItems = role === 'ADMIN'
+        ? ADMIN_NAV_ITEMS
+        : role === 'WAREHOUSE_MGR'
+        ? MANAGER_NAV_ITEMS
+        : VIEWER_NAV_ITEMS;
 
     return (
         <div className="min-h-screen bg-slate-50 flex">
@@ -101,7 +129,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
                         Workspace
                     </p>
 
-                    {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+                    {navItems.map(({ to, label, icon: Icon }) => (
                         <NavLink
                             key={to}
                             to={to}
@@ -237,7 +265,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 
                     {/* Right side */}
                     <div className="flex items-center gap-4">
-                        <NotificationBell />
+                        {role !== 'VIEWER' && <NotificationBell />}
 
                         <div className="h-8 w-px bg-slate-200" />
 
@@ -249,7 +277,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
                                 </p>
                                 <div className="mt-0.5">
                                     <Badge tone={roleTone as 'indigo' | 'green' | 'slate'}>
-                                        {role}
+                                        {roleLabel}
                                     </Badge>
                                 </div>
                             </div>
@@ -282,7 +310,11 @@ export function AppShell({ children }: { children?: ReactNode }) {
                         <NavLink to="/help" className="hover:text-indigo-700">Help & Support</NavLink>
                         <NavLink to="/privacy" className="hover:text-indigo-700">Privacy policy</NavLink>
                         <NavLink to="/terms" className="hover:text-indigo-700">Terms of use</NavLink>
-                        <NavLink to="/data" className="hover:text-indigo-700">Data & Retention</NavLink>
+                        {isAdmin && (
+                            <NavLink to="/data" className="hover:text-indigo-700">
+                                Data & Retention
+                            </NavLink>
+                        )}
                     </div>
                 </footer>
             </div>

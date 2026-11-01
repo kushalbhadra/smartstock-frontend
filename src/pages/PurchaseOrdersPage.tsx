@@ -14,12 +14,30 @@ import { Modal } from '../components/ui/Modal';
 import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { EmptyRow, TableWrap, Td, Th } from '../components/Table';
 import { fmtDate } from '../utils/format';
+import { getApiErrorMessage } from '../utils/apiError';
 import type {
     Product, PurchaseOrder,
     PurchaseOrderStatus, Supplier, Warehouse,
 } from '../types';
 
-// Status → badge tone mapping
+type SummaryStatus = Exclude<PurchaseOrderStatus, 'DELIVERED'>;
+
+const SUMMARY_STATUSES: SummaryStatus[] = [
+    'PENDING',
+    'APPROVED',
+    'PARTIALLY_RECEIVED',
+    'RECEIVED',
+    'CANCELLED',
+];
+
+const STATUS_LABEL: Record<SummaryStatus, string> = {
+    PENDING: 'Pending',
+    APPROVED: 'Approved',
+    PARTIALLY_RECEIVED: 'Partially received',
+    RECEIVED: 'Received',
+    CANCELLED: 'Cancelled',
+};
+
 const STATUS_TONE: Record<PurchaseOrderStatus,
     'yellow' | 'blue' | 'green' | 'red' | 'orange'> = {
     PENDING:   'yellow',
@@ -29,6 +47,10 @@ const STATUS_TONE: Record<PurchaseOrderStatus,
     DELIVERED: 'green',
     CANCELLED: 'red',
 };
+
+function summaryStatus(status: PurchaseOrderStatus): SummaryStatus {
+    return status === 'DELIVERED' ? 'RECEIVED' : status;
+}
 
 export default function PurchaseOrdersPage() {
     const [searchParams] = useSearchParams();
@@ -41,9 +63,12 @@ export default function PurchaseOrdersPage() {
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [suppliers, setSuppliers]   = useState<Supplier[]>([]);
     const [loadError, setLoadError]   = useState<string | null>(null);
-    const [showAdd, setShowAdd]       = useState(false);
+    const [showAdd, setShowAdd] = useState(
+        () => searchParams.get('action') === 'add' && canMutate
+    );
     const [receivingOrder, setReceivingOrder] = useState<PurchaseOrder | null>(null);
     const [statusFilter, setStatusFilter] = useState<string>('All');
+    const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
 
     const fetchPageData = useCallback(() => Promise.allSettled([
         purchaseOrderApi.getAll(),
@@ -107,18 +132,28 @@ export default function PurchaseOrdersPage() {
         id: number,
         status: PurchaseOrderStatus
     ) => {
+        if (updatingOrderId !== null) return;
+        setUpdatingOrderId(id);
         try {
-            await purchaseOrderApi.updateStatus(id, status);
-            success('Status updated');
+            const updatedOrder = await purchaseOrderApi.updateStatus(id, status);
+            setOrders(current => current?.map(order =>
+                order.id === id ? updatedOrder : order
+            ) ?? current);
             await load();
-        } catch {
-            showError('Status update failed. Check the allowed purchase-order transitions.');
+            success(`${updatedOrder.poNumber} status changed to ${
+                STATUS_LABEL[summaryStatus(updatedOrder.status)]
+            }.`);
+        } catch (error) {
+            showError(getApiErrorMessage(error, 'Status update failed'));
+            await load();
+        } finally {
+            setUpdatingOrderId(null);
         }
     };
 
     // Filter by status
     const filtered = orders?.filter(o =>
-        statusFilter === 'All' || o.status === statusFilter
+        statusFilter === 'All' || summaryStatus(o.status) === statusFilter
     ) ?? [];
 
     return (
@@ -135,12 +170,11 @@ export default function PurchaseOrdersPage() {
                             className="input sm:max-w-[160px]"
                         >
                             <option value="All">All Status</option>
-                            <option value="PENDING">Pending</option>
-                            <option value="APPROVED">Approved</option>
-                            <option value="PARTIALLY_RECEIVED">Partially received</option>
-                            <option value="RECEIVED">Received</option>
-                            <option value="DELIVERED">Delivered</option>
-                            <option value="CANCELLED">Cancelled</option>
+                            {SUMMARY_STATUSES.map(status => (
+                                <option key={status} value={status}>
+                                    {STATUS_LABEL[status]}
+                                </option>
+                            ))}
                         </select>
 
                         {canMutate && (
@@ -157,10 +191,8 @@ export default function PurchaseOrdersPage() {
             />
 
             {/* ── STATS ROW ───────────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                {(['PENDING', 'APPROVED', 'PARTIALLY_RECEIVED',
-                    'RECEIVED', 'DELIVERED', 'CANCELLED'] as
-                    PurchaseOrderStatus[]).map(status => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+                {SUMMARY_STATUSES.map(status => (
                     <button
                         key={status}
                         onClick={() => setStatusFilter(
@@ -174,15 +206,15 @@ export default function PurchaseOrdersPage() {
                         }`}
                     >
                         <p className="text-xs text-slate-400 font-medium">
-                            {status}
+                            {STATUS_LABEL[status]}
                         </p>
                         <p className="text-2xl font-bold mt-1">
                             {orders?.filter(
-                                o => o.status === status
+                                o => summaryStatus(o.status) === status
                             ).length ?? '—'}
                         </p>
                         <Badge tone={STATUS_TONE[status]}>
-                            {status}
+                            {STATUS_LABEL[status]}
                         </Badge>
                     </button>
                 ))}
@@ -208,8 +240,12 @@ export default function PurchaseOrdersPage() {
                 ) : filtered.length === 0 ? (
                     <EmptyState
                         icon={ClipboardList}
-                        title="No purchase orders"
-                        message="Raise a purchase order to get started."
+                        title={orders.length === 0
+                            ? 'No purchase orders'
+                            : 'No matching purchase orders'}
+                        message={orders.length === 0
+                            ? 'Raise a purchase order to get started.'
+                            : 'Try a different status filter.'}
                     />
                 ) : (
                     <TableWrap>
@@ -219,9 +255,21 @@ export default function PurchaseOrdersPage() {
                                 <Th>Supplier</Th>
                                 <Th>Product</Th>
                                 <Th>Warehouse</Th>
-                                <Th>Quantity</Th>
-                                <Th>Received</Th>
-                                <Th>Unit price</Th>
+                                <Th>
+                                    <span className="block text-right">
+                                        Quantity
+                                    </span>
+                                </Th>
+                                <Th>
+                                    <span className="block text-right">
+                                        Received
+                                    </span>
+                                </Th>
+                                <Th>
+                                    <span className="block text-right">
+                                        Unit price
+                                    </span>
+                                </Th>
                                 <Th>Expected</Th>
                                 <Th>Status</Th>
                                 {(isAdmin || canMutate) && <Th>Actions</Th>}
@@ -261,16 +309,16 @@ export default function PurchaseOrdersPage() {
                                     <Td>
                                         {o.warehouse?.name ?? '—'}
                                     </Td>
-                                    <Td className="font-semibold">
+                                    <Td className="text-right font-semibold tabular-nums">
                                         {o.quantity}
                                     </Td>
-                                    <Td className="text-sm text-slate-600">
+                                    <Td className="text-right text-sm text-slate-600 tabular-nums">
                                         {o.receivedQuantity} received
                                         <p className="text-xs text-slate-400">
                                             {o.remainingQuantity} remaining
                                         </p>
                                     </Td>
-                                    <Td className="text-sm">
+                                    <Td className="text-right text-sm tabular-nums">
                                         {Number(o.purchaseUnitPrice).toFixed(2)}
                                     </Td>
                                     <Td className="text-slate-500 text-xs">
@@ -283,42 +331,44 @@ export default function PurchaseOrdersPage() {
                                         <Badge
                                             tone={STATUS_TONE[o.status]}
                                         >
-                                            {o.status}
+                                            {STATUS_LABEL[summaryStatus(o.status)]}
                                         </Badge>
                                     </Td>
                                     {(isAdmin || canMutate) && (
                                         <Td>
                                             <div className="flex flex-col gap-2">
-                                                {isAdmin && (o.status === 'PENDING'
-                                                    || o.status === 'APPROVED') && (
+                                                {(isAdmin || o.canApprove)
+                                                    && o.status === 'PENDING' && (
                                                     <select
-                                                        value={o.status}
+                                                        value=""
                                                         onChange={e => void handleStatusChange(
                                                             o.id,
                                                             e.target.value as PurchaseOrderStatus
                                                         )}
+                                                        disabled={updatingOrderId !== null}
                                                         className="input text-xs py-1.5 max-w-[160px]"
+                                                        aria-label={`Actions for ${o.poNumber}`}
                                                     >
-                                                        {o.status === 'PENDING' ? (
-                                                            <>
-                                                                <option value="PENDING">PENDING</option>
-                                                                <option value="APPROVED">APPROVED</option>
-                                                                <option value="CANCELLED">CANCELLED</option>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <option value="APPROVED">APPROVED</option>
-                                                                <option value="CANCELLED">CANCELLED</option>
-                                                            </>
+                                                        <option value="" disabled>
+                                                            Actions
+                                                        </option>
+                                                        <option value="APPROVED">Approve</option>
+                                                        {isAdmin && (
+                                                            <option value="CANCELLED">
+                                                                Cancel
+                                                            </option>
                                                         )}
                                                     </select>
                                                 )}
-                                                {canMutate && (o.status === 'APPROVED'
-                                                    || o.status === 'PARTIALLY_RECEIVED') && (
+                                                {canMutate
+                                                    && (o.status === 'APPROVED'
+                                                        || o.status === 'PARTIALLY_RECEIVED')
+                                                    && o.remainingQuantity > 0 && (
                                                     <button
                                                         type="button"
                                                         className="btn-secondary text-xs"
                                                         onClick={() => setReceivingOrder(o)}
+                                                        disabled={updatingOrderId !== null}
                                                     >
                                                         <PackageCheck className="h-3.5 w-3.5" />
                                                         Receive
@@ -577,19 +627,23 @@ function PurchaseOrderReceiptModal({
         event.preventDefault();
         setLoading(true);
         try {
-            await purchaseOrderApi.receive(order.id, {
+            const updatedOrder = await purchaseOrderApi.receive(order.id, {
                 quantity,
                 receivedDate,
                 warehouseId: order.warehouse.id,
                 referenceNumber: referenceNumber.trim(),
                 notes: notes.trim(),
             });
-            toast.success('Goods receipt recorded');
+            toast.success(`Recorded ${quantity} units for ${order.poNumber}; `
+                + `status is now ${
+                    STATUS_LABEL[summaryStatus(updatedOrder.status)]
+                }.`);
             onSaved();
         } catch (reason) {
-            const message = axios.isAxiosError<{ message?: string }>(reason)
-                ? reason.response?.data?.message ?? reason.message
-                : reason instanceof Error ? reason.message : 'Unknown error';
+            const message = getApiErrorMessage(
+                reason,
+                reason instanceof Error ? reason.message : 'Unknown error'
+            );
             toast.error(`Could not record receipt: ${message}`);
         } finally {
             setLoading(false);
