@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Archive, Download, FileSpreadsheet, ShieldAlert } from 'lucide-react';
+import axios from 'axios';
 import { stockApi } from '../api/stockApi';
 import { useToast } from '../context/useToast';
 import { PageHeader } from '../components/PageHeader';
@@ -23,8 +24,8 @@ export default function DataManagementPage() {
                 : 'stock-movements.xlsx';
             downloadBlob(blob, fileName);
             showSuccess('Export downloaded');
-        } catch {
-            showError('Could not export data. Check your connection and try again.');
+        } catch (reason) {
+            showError(await getExportErrorMessage(reason));
         } finally {
             setDownloading(null);
         }
@@ -116,6 +117,38 @@ export default function DataManagementPage() {
             </section>
         </>
     );
+}
+
+async function getExportErrorMessage(reason: unknown): Promise<string> {
+    const fallback = 'Could not export data. Check your connection and try again.';
+    if (!axios.isAxiosError(reason)) return fallback;
+
+    if (reason.response?.status === 401) {
+        return 'Your session has expired. Sign in again and retry the export.';
+    }
+    if (reason.response?.status === 403) {
+        return 'Your account does not have permission to export this data.';
+    }
+
+    const data: unknown = reason.response?.data;
+    if (data instanceof Blob && data.type.includes('json')) {
+        try {
+            const payload: unknown = JSON.parse(await data.text());
+            if (
+                typeof payload === 'object'
+                && payload !== null
+                && 'message' in payload
+                && typeof payload.message === 'string'
+                && payload.message.trim()
+            ) {
+                return payload.message;
+            }
+        } catch {
+            return fallback;
+        }
+    }
+
+    return fallback;
 }
 
 function ExportCard({

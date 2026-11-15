@@ -88,7 +88,7 @@ export default function AuditLogPage() {
                             {filtered.length === 0 ? (
                                 <EmptyRow colSpan={5} message="No events match this search." />
                             ) : filtered.map(event => (
-                                <tr key={event.id} className="hover:bg-slate-50/60">
+                                <tr key={event.id} className="hover:bg-slate-50/60 transition-colors">
                                     <Td className="whitespace-nowrap text-xs text-slate-500">{new Date(event.createdAt).toLocaleString()}</Td>
                                     <Td>
                                         <p className="font-medium text-slate-800">{event.actorName}</p>

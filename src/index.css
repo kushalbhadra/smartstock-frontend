@@ -236,6 +236,10 @@ html.dark .hover\:bg-slate-50:hover {
   background-color: #1e293b;
 }
 
+html.dark .hover\:bg-slate-50\/60:hover {
+  background-color: #1e293b;
+}
+
 html.dark .hover\:bg-slate-100:hover {
   background-color: #334155;
 }
