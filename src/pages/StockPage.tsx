@@ -11,6 +11,7 @@ import { EmptyState, TableSkeleton } from '../components/ui/Spinner';
 import { TableWrap, Td, Th } from '../components/Table';
 import { downloadBlob } from '../utils/excel';
 import { fmt, getStockStatus } from '../utils/format';
+import { getApiErrorMessage } from '../utils/apiError';
 import type { Stock, StockStatus, Warehouse } from '../types';
 
 export default function StockPage() {
@@ -20,6 +21,7 @@ export default function StockPage() {
     const focusStockId = Number(searchParams.get('stockId'));
 
     const [stocks, setStocks]             = useState<Stock[] | null>(null);
+    const [loadError, setLoadError]       = useState<string | null>(null);
     const [warehouses, setWarehouses]     = useState<Warehouse[]>([]);
     const [warehouseFilter, setWarehouseFilter] = useState<string>('All');
     const [statusFilter, setStatusFilter] = useState<StockStatus | 'All'>('All');
@@ -31,13 +33,20 @@ export default function StockPage() {
             const [s, w] = await Promise.all([
                 isManager && warehouseId
                     ? stockApi.getByWarehouse(warehouseId)
+                    : isManager
+                    ? Promise.resolve([])
                     : stockApi.getAll(),
                 warehouseApi.getAll(),
             ]);
             setStocks(s);
             setWarehouses(w);
-        } catch {
-            showError('Failed to load stock levels');
+            setLoadError(null);
+        } catch (reason) {
+            const message = getApiErrorMessage(
+                reason, 'Failed to load stock levels'
+            );
+            setLoadError(message);
+            showError(message);
         }
     }, [isManager, showError, warehouseId]);
 
@@ -157,7 +166,20 @@ export default function StockPage() {
 
             {/* ── TABLE ──────────────────────────────────────────── */}
             <div className="card">
-                {!stocks ? (
+                {loadError ? (
+                    <div className="p-8 text-center">
+                        <p role="alert" className="text-sm text-rose-600">
+                            {loadError}
+                        </p>
+                        <button type="button" className="btn-secondary mt-4"
+                            onClick={() => {
+                                setLoadError(null);
+                                void load();
+                            }}>
+                            Try again
+                        </button>
+                    </div>
+                ) : !stocks ? (
                     <TableSkeleton cols={7} />
                 ) : filtered.length === 0 ? (
                     <EmptyState

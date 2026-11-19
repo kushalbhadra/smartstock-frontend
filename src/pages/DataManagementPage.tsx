@@ -36,7 +36,7 @@ export default function DataManagementPage() {
             {!token && (
                 <header className="mb-6 rounded-xl border border-slate-200 bg-white px-5 py-4">
                     <Link to="/" className="font-bold tracking-tight text-slate-900">
-                        smartstock
+                        GoodsPilot
                     </Link>
                 </header>
             )}
@@ -98,7 +98,7 @@ export default function DataManagementPage() {
                     <div>
                         <h2 className="font-semibold text-slate-900">Retention in this installation</h2>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                            SmartStock does not currently run an automatic retention or deletion schedule. Records remain in the configured database until an authorized user deletes them or an administrator manages the database. Some records cannot be deleted while they are referenced by operational history.
+                            GoodsPilot does not currently run an automatic retention or deletion schedule. Records remain in the configured database until an authorized user deletes them or an administrator manages the database. Some records cannot be deleted while they are referenced by operational history.
                         </p>
                         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
                             Database backups, storage duration, and recovery procedures depend on how your organization hosts the backend and database; this screen does not configure or verify those services. Agree a retention and backup policy with your system administrator before using real business or personal data.

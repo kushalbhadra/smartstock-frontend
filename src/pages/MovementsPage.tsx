@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, BarChart3, Download, Plus } from 'lucide-react';
 import { stockApi } from '../api/stockApi';
-import { productApi } from '../api/productApi';
 import {
     warehouseApi,
     type WarehouseOption,
@@ -38,7 +37,6 @@ export default function MovementsPage() {
 
     const [movementPage, setMovementPage] = useState<StockMovementPage | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
-    const [products, setProducts]     = useState<Product[]>([]);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [transferWarehouses, setTransferWarehouses] =
         useState<WarehouseOption[]>([]);
@@ -46,8 +44,7 @@ export default function MovementsPage() {
         () => searchParams.get('action') === 'add' && canMutate
     );
     const [showTransfer, setShowTransfer] = useState(
-        () => searchParams.get('action') === 'transfer'
-            && (isAdmin || isManager && warehouseId !== null)
+        () => searchParams.get('action') === 'transfer' && isAdmin
     );
     const [typeFilter, setTypeFilter] = useState('All');
     const [search, setSearch] = useState('');
@@ -58,7 +55,7 @@ export default function MovementsPage() {
 
     const load = useCallback(async () => {
         try {
-            const [movementResult, p, w, transferOptions] = await Promise.all([
+            const [movementResult, w] = await Promise.all([
                 stockApi.getHistory({
                     ...(typeFilter !== 'All'
                         ? { type: typeFilter } : {}),
@@ -70,22 +67,15 @@ export default function MovementsPage() {
                     page,
                     size: 20,
                 }),
-                productApi.getAll(),
                 warehouseApi.getAll(),
-                isManager
-                    ? warehouseApi.getTransferDestinations()
-                    : Promise.resolve([]),
             ]);
             setMovementPage(movementResult);
             setLoadError(null);
-            setProducts(p);
             setWarehouses(w);
-            setTransferWarehouses(isAdmin
-                ? w.map(warehouse => ({
-                    id: warehouse.id,
-                    name: warehouse.name,
-                }))
-                : transferOptions);
+            setTransferWarehouses(w.map(warehouse => ({
+                id: warehouse.id,
+                name: warehouse.name,
+            })));
         } catch (error) {
             const message = getApiErrorMessage(
                 error,
@@ -101,7 +91,7 @@ export default function MovementsPage() {
             showError(message);
         }
     }, [
-        from, isAdmin, isManager, page, search, showError, to, typeFilter,
+        from, page, search, showError, to, typeFilter,
         warehouseFilter,
     ]);
 
@@ -218,7 +208,7 @@ export default function MovementsPage() {
                                     <Plus className="w-4 h-4" />
                                     Record Movement
                                 </button>
-                                {(isAdmin || isManager && warehouseId !== null) && <button
+                                {isAdmin && <button
                                     onClick={() => setShowTransfer(true)}
                                     className="btn-primary"
                                 >
@@ -377,7 +367,6 @@ export default function MovementsPage() {
 
             {showAdd && (
                 <MovementFormModal
-                    products={products}
                     warehouses={warehouses}
                     defaultWarehouseId={
                         isManager && warehouseId
@@ -390,7 +379,6 @@ export default function MovementsPage() {
             )}
             {showTransfer && (
                 <TransferFormModal
-                    products={products}
                     warehouses={transferWarehouses}
                     defaultWarehouseId={isManager ? warehouseId ?? undefined : undefined}
                     onClose={() => setShowTransfer(false)}
@@ -404,19 +392,20 @@ export default function MovementsPage() {
 // ── MOVEMENT FORM MODAL ───────────────────────────────────────────────
 
 function MovementFormModal({
-    products,
     warehouses,
     defaultWarehouseId,
     onClose,
     onSaved,
 }: {
-    products: Product[];
     warehouses: Warehouse[];
     defaultWarehouseId?: number;
     onClose: () => void;
     onSaved: () => void;
 }) {
     const { error: showError, success: showSuccess } = useToast();
+    const [products, setProducts] = useState<Product[]>([]);
+    const [productsLoading, setProductsLoading] =
+        useState(Boolean(defaultWarehouseId));
 
     const [form, setForm] = useState<StockMovementRequest>({
         warehouseId:  defaultWarehouseId ?? 0,
@@ -429,12 +418,38 @@ function MovementFormModal({
     });
     const [loading, setLoading] = useState(false);
 
+    useEffect(() => {
+        let active = true;
+        if (!form.warehouseId) return () => { active = false; };
+
+        void Promise.resolve()
+            .then(() => stockApi.getProductsByWarehouse(form.warehouseId))
+            .then(result => {
+                if (active) setProducts(result);
+            })
+            .catch(error => {
+                if (active) {
+                    showError(getApiErrorMessage(
+                        error, 'Could not load products for this warehouse'
+                    ));
+                }
+            })
+            .finally(() => {
+                if (active) setProductsLoading(false);
+            });
+        return () => { active = false; };
+    }, [form.warehouseId, showError]);
+
     const handleChange = (
         e: React.ChangeEvent<
             HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
         >
     ) => {
         const { name, value } = e.target;
+        if (name === 'warehouseId') {
+            setProducts([]);
+            setProductsLoading(Boolean(value));
+        }
         setForm(prev => ({
             ...prev,
             [name]: name === 'quantity' ||
@@ -442,6 +457,7 @@ function MovementFormModal({
                     name === 'warehouseId'
                 ? parseInt(value) || 0
                 : value,
+            ...(name === 'warehouseId' ? { productId: 0 } : {}),
         }));
     };
 
@@ -509,6 +525,7 @@ function MovementFormModal({
                         value={form.productId}
                         onChange={handleChange}
                         className="input"
+                        disabled={!form.warehouseId || productsLoading}
                     >
                         <option value={0}>Select product...</option>
                         {products.map(p => (
@@ -621,19 +638,19 @@ function MovementFormModal({
 }
 
 function TransferFormModal({
-    products,
     warehouses,
     defaultWarehouseId,
     onClose,
     onSaved,
 }: {
-    products: Product[];
     warehouses: WarehouseOption[];
     defaultWarehouseId?: number;
     onClose: () => void;
     onSaved: () => void;
 }) {
     const { error: showError, success: showSuccess } = useToast();
+    const [products, setProducts] = useState<Product[]>([]);
+    const [productsLoading, setProductsLoading] = useState(false);
     const [form, setForm] = useState<StockTransferRequest>({
         sourceWarehouseId: defaultWarehouseId ?? 0,
         destinationWarehouseId: 0,
@@ -643,6 +660,30 @@ function TransferFormModal({
         referenceNumber: '',
     });
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        if (!form.sourceWarehouseId) return () => { active = false; };
+
+        void Promise.resolve()
+            .then(() => stockApi.getProductsByWarehouse(
+                form.sourceWarehouseId
+            ))
+            .then(result => {
+                if (active) setProducts(result);
+            })
+            .catch(error => {
+                if (active) {
+                    showError(getApiErrorMessage(
+                        error, 'Could not load source warehouse products'
+                    ));
+                }
+            })
+            .finally(() => {
+                if (active) setProductsLoading(false);
+            });
+        return () => { active = false; };
+    }, [form.sourceWarehouseId, showError]);
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -670,6 +711,10 @@ function TransferFormModal({
         >
     ) => {
         const { name, value } = event.target;
+        if (name === 'sourceWarehouseId') {
+            setProducts([]);
+            setProductsLoading(Boolean(value));
+        }
         setForm(current => ({
             ...current,
             [name]: name === 'sourceWarehouseId'
@@ -678,6 +723,7 @@ function TransferFormModal({
                 || name === 'quantity'
                 ? Number.parseInt(value, 10) || 0
                 : value,
+            ...(name === 'sourceWarehouseId' ? { productId: 0 } : {}),
         }));
     };
 
@@ -728,6 +774,7 @@ function TransferFormModal({
                         value={form.productId}
                         onChange={update}
                         className="input"
+                        disabled={!form.sourceWarehouseId || productsLoading}
                     >
                         <option value={0}>Select product...</option>
                         {products.map(product => (

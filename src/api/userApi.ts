@@ -1,5 +1,10 @@
 import axiosInstance from './axiosInstance';
-import type { User, UserProfileRequest, UserRequest } from '../types';
+import type {
+    ChangePasswordRequest,
+    User,
+    UserProfileRequest,
+    UserRequest,
+} from '../types';
 
 export const userApi = {
 
@@ -18,6 +23,12 @@ export const userApi = {
     ): Promise<User> => {
         const response = await axiosInstance.put('/api/users/me', data);
         return response.data;
+    },
+
+    changeCurrentPassword: async (
+        data: ChangePasswordRequest
+    ): Promise<void> => {
+        await axiosInstance.post('/api/users/me/password', data);
     },
 
     create: async (data: UserRequest): Promise<User> => {

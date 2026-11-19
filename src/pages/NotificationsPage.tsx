@@ -13,9 +13,13 @@ import type {
 } from '../types';
 import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/Badge';
-import { EmptyState, PageLoader } from '../components/ui/Spinner';
+import {
+    EmptyState,
+    NotificationSkeleton,
+} from '../components/ui/Spinner';
 import { useToast } from '../context/useToast';
 import { timeAgo } from '../utils/format';
+import { getApiErrorMessage } from '../utils/apiError';
 
 const TYPES: NotificationType[] = [
     'LOW_STOCK',
@@ -80,10 +84,10 @@ export default function NotificationsPage() {
     const [page, setPage] = useState(0);
     const [markingAll, setMarkingAll] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [loadError, setLoadError] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const loadNotifications = useCallback(async () => {
-        setLoadError(false);
+        setLoadError(null);
         try {
             const filters = {
                 ...(type ? { type } : {}),
@@ -94,9 +98,12 @@ export default function NotificationsPage() {
                 size: 20,
             };
             setData(await notificationApi.getAll(filters));
-        } catch {
-            setLoadError(true);
-            showError('Failed to load notifications');
+        } catch (reason) {
+            const message = getApiErrorMessage(
+                reason, 'Failed to load notifications'
+            );
+            setLoadError(message);
+            showError(message);
         } finally {
             setLoading(false);
         }
@@ -133,12 +140,12 @@ export default function NotificationsPage() {
         }
     };
 
-    if (loading && !data) return <PageLoader />;
+    if (loading && !data) return <NotificationSkeleton />;
     if (!data) {
         return (
             <div className="card p-6 text-center">
                 <p className="text-sm text-slate-600">
-                    {loadError ? 'Notifications could not be loaded.' : 'No notifications available.'}
+                    {loadError ?? 'No notifications available.'}
                 </p>
                 <button
                     type="button"

@@ -7,6 +7,7 @@ import type {
     StockMovementRequest,
     StockTransferRequest,
     StockAllocationRequest,
+    Product,
 } from '../types';
 
 export const stockApi = {
@@ -23,6 +24,13 @@ export const stockApi = {
     getByWarehouse: async (warehouseId: number): Promise<Stock[]> => {
         const response = await axiosInstance.get(
             `/api/stocks/warehouse/${warehouseId}`
+        );
+        return response.data;
+    },
+
+    getProductsByWarehouse: async (warehouseId: number): Promise<Product[]> => {
+        const response = await axiosInstance.get<Product[]>(
+            `/api/products/warehouse/${warehouseId}`
         );
         return response.data;
     },

@@ -35,6 +35,7 @@ export default function ProductsPage() {
 
     // ── STATE ─────────────────────────────────────────────────────────
     const [products, setProducts]         = useState<Product[] | null>(null);
+    const [loadError, setLoadError]       = useState<string | null>(null);
     const [allocations, setAllocations]   = useState<Stock[]>([]);
     const [warehouses, setWarehouses]     = useState<Warehouse[]>([]);
     const [search, setSearch]             = useState('');
@@ -58,10 +59,13 @@ export default function ProductsPage() {
             ]);
         if (productsResult.status === 'fulfilled') {
             setProducts(productsResult.value);
+            setLoadError(null);
         } else {
-            const error = productsResult.reason;
-            console.error('Failed to load products:', error);
-            setProducts([]);
+            const message = getApiErrorMessage(
+                productsResult.reason, 'Failed to load products'
+            );
+            setLoadError(message);
+            showError(message);
         }
         if (allocationsResult.status === 'fulfilled') {
             setAllocations(allocationsResult.value);
@@ -102,7 +106,7 @@ export default function ProductsPage() {
             await productApi.delete(deleteProduct.id);
             showSuccess('Product deleted');
             setDeleteProduct(null);
-            load();
+            await load();
         } catch (error) {
             showError(getApiErrorMessage(error, 'Delete failed'));
         }
@@ -234,7 +238,20 @@ export default function ProductsPage() {
 
             {/* ── TABLE ──────────────────────────────────────────── */}
             <div className="card">
-                {!products ? (
+                {loadError ? (
+                    <div className="p-8 text-center">
+                        <p role="alert" className="text-sm text-rose-600">
+                            {loadError}
+                        </p>
+                        <button type="button" className="btn-secondary mt-4"
+                            onClick={() => {
+                                setLoadError(null);
+                                void load();
+                            }}>
+                            Try again
+                        </button>
+                    </div>
+                ) : !products ? (
                     <TableSkeleton cols={isAdmin ? 7 : 6} />
                 ) : (
                     <TableWrap>
@@ -269,18 +286,20 @@ export default function ProductsPage() {
                                                             text-xs font-bold shrink-0">
                                                 {p.name.slice(0, 2).toUpperCase()}
                                             </div>
-                                            <span className="font-medium
-                                                             text-slate-800">
-                                                {p.name}
-                                            </span>
-                                            <span className="block text-xs text-slate-500">
-                                                {allocations
-                                                    .filter(item => item.productId === p.id)
-                                                    .map(item =>
-                                                        `${item.warehouseName}: ${item.quantity}`
-                                                    )
-                                                    .join(' · ') || 'No warehouse allocation'}
-                                            </span>
+                                            <div className="min-w-0">
+                                                <span className="font-medium
+                                                                 text-slate-800">
+                                                    {p.name}
+                                                </span>
+                                                <span className="block text-xs text-slate-500">
+                                                    {allocations
+                                                        .filter(item => item.productId === p.id)
+                                                        .map(item =>
+                                                            `${item.warehouseName}: ${item.quantity}`
+                                                        )
+                                                        .join(' · ') || 'No warehouse allocation'}
+                                                </span>
+                                            </div>
                                         </div>
                                     </Td>
                                     <Td>
@@ -323,26 +342,18 @@ export default function ProductsPage() {
                                                 >
                                                     <Pencil className="w-4 h-4" />
                                                 </button>
-                                                <span
-                                                    title={p.deletionBlockedReason
-                                                        ?? 'Delete product'}
-                                                >
+                                                {p.canDelete && (
                                                     <button
                                                         onClick={() => setDeleteProduct(p)}
-                                                        disabled={!p.canDelete}
                                                         aria-label={`Delete ${p.name}`}
                                                         className="p-1.5 rounded-lg
                                                                    text-slate-400
                                                                    hover:text-rose-600
-                                                                   hover:bg-rose-50
-                                                                   disabled:cursor-not-allowed
-                                                                   disabled:opacity-40
-                                                                   disabled:hover:bg-transparent
-                                                                   disabled:hover:text-slate-400"
+                                                                   hover:bg-rose-50"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
-                                                </span>
+                                                )}
                                             </div>
                                         </Td>
                                     )}

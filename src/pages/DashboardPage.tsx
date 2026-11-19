@@ -31,7 +31,7 @@ import {
 import { Link } from 'react-router-dom';
 import axiosInstance from '../api/axiosInstance';
 import { PageHeader } from '../components/PageHeader';
-import { PageLoader } from '../components/ui/Spinner';
+import { DashboardSkeleton } from '../components/ui/Spinner';
 import { useAuth } from '../context/useAuth';
 import { getApiErrorMessage } from '../utils/apiError';
 import type { DashboardSummary } from '../types';
@@ -65,7 +65,7 @@ export default function DashboardPage() {
         void Promise.resolve().then(loadDashboard);
     }, [loadDashboard]);
 
-    if (loading) return <PageLoader />;
+    if (loading) return <DashboardSkeleton />;
 
     if (loadError || !summary) {
         return (
@@ -161,7 +161,11 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-7">
-            <PageHeader title="Dashboard" />
+            <PageHeader
+                eyebrow="GoodsPilot"
+                title="Dashboard"
+                description="Smart Inventory. Smarter Operations."
+            />
 
             <section className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -348,7 +352,7 @@ export default function DashboardPage() {
                 />
             </section>
 
-            {(isAdmin || isManager) && summary.notifications.length > 0 && (
+            {(isAdmin || isManager) && (
                 <section className="card p-5">
                     <div className="mb-4 flex items-center justify-between">
                         <h2 className="font-semibold text-slate-900">Operational alerts</h2>
@@ -356,14 +360,18 @@ export default function DashboardPage() {
                             View all
                         </Link>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                        {summary.notifications.slice(0, 4).map(notification => (
-                            <div key={notification.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                                <p className="text-sm font-semibold text-slate-800">{notification.title}</p>
-                                <p className="mt-1 line-clamp-2 text-xs text-slate-500">{notification.message}</p>
-                            </div>
-                        ))}
-                    </div>
+                    {summary.notifications.length === 0 ? (
+                        <EmptyMessage message="No operational alerts right now." />
+                    ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                            {summary.notifications.slice(0, 4).map(notification => (
+                                <div key={notification.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                                    <p className="text-sm font-semibold text-slate-800">{notification.title}</p>
+                                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{notification.message}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </section>
             )}
 

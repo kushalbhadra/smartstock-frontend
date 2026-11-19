@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useAuth } from './context/useAuth';
 import { AppShell } from './components/AppShell';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import ProductsPage from './pages/ProductsPage';
 import WarehousesPage from './pages/WarehousesPage';
@@ -10,6 +11,7 @@ import StockPage from './pages/StockPage';
 import MovementsPage from './pages/MovementsPage';
 import PurchaseOrdersPage from './pages/PurchaseOrdersPage';
 import SuppliersPage      from './pages/SuppliersPage';
+import SupplierProductMappingsPage from './pages/SupplierProductMappingsPage';
 import ForecastsPage      from './pages/ForecastsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import UsersPage          from './pages/UsersPage';
@@ -52,6 +54,7 @@ export default function App() {
             {/* Public */}
             <Route path="/" element={<HomeRoute />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route
                 path="/privacy"
                 element={<PublicInfoPage><LegalPage /></PublicInfoPage>}
@@ -88,9 +91,10 @@ export default function App() {
                     element={<RequireAdmin><UsersPage /></RequireAdmin>}
                 />
                 <Route
-                    path="/settings"
-                    element={<RequireAdmin><SettingsPage /></RequireAdmin>}
+                    path="/supplier-product-mappings"
+                    element={<RequireAdmin><SupplierProductMappingsPage /></RequireAdmin>}
                 />
+                <Route path="/settings" element={<SettingsPage />} />
                 <Route
                     path="/audit-log"
                     element={<RequireAdmin><AuditLogPage /></RequireAdmin>}

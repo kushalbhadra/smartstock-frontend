@@ -27,11 +27,11 @@ export default function LandingPage() {
         <div className="min-h-screen bg-slate-50 text-slate-900">
             <header className="relative z-20 border-b border-slate-200/80 bg-slate-50/90 backdrop-blur">
                 <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-                    <Link to="/" className="flex items-center gap-2.5" aria-label="SmartStock home">
+                    <Link to="/" className="flex items-center gap-2.5" aria-label="GoodsPilot home">
                         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white">
                             <Package className="h-5 w-5" />
                         </span>
-                        <span className="text-lg font-bold tracking-tight">SmartStock</span>
+                        <span className="text-lg font-bold tracking-tight">GoodsPilot</span>
                     </Link>
                     <button
                         type="button"
@@ -48,6 +48,10 @@ export default function LandingPage() {
                         <Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-5 py-2.5 font-semibold text-white transition hover:bg-indigo-700">
                             Sign in <ArrowRight className="h-4 w-4" />
                         </Link>
+                        <Link to="/register" onClick={() => setMenuOpen(false)}
+                            className="text-center font-semibold text-indigo-700 hover:text-indigo-800">
+                            Create account
+                        </Link>
                     </div>
                 </nav>
             </header>
@@ -61,6 +65,9 @@ export default function LandingPage() {
                                 <span className="h-2 w-2 rounded-full bg-indigo-500" />
                                 INVENTORY, WITHOUT THE GUESSWORK
                             </p>
+                            <p className="mb-3 text-sm font-semibold text-indigo-700">
+                                GoodsPilot · Smart Inventory. Smarter Operations.
+                            </p>
                             <h1 className="max-w-2xl text-5xl font-semibold leading-[1.05] tracking-[-0.045em] sm:text-6xl lg:text-7xl">
                                 A steadier way to keep <span className="font-serif italic text-indigo-700">stock moving.</span>
                             </h1>
@@ -70,6 +77,9 @@ export default function LandingPage() {
                             <div className="mt-8 flex flex-wrap items-center gap-3">
                                 <Link to="/login" className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/10 transition duration-300 hover:-translate-y-0.5 hover:bg-indigo-700">
                                     Open your workspace <ArrowRight className="h-4 w-4" />
+                                </Link>
+                                <Link to="/register" className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-6 py-3.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50">
+                                    Create a viewer account
                                 </Link>
                                 <a href="#features" className="inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-slate-700 transition hover:bg-white">
                                     Take a look <ArrowDown className="h-4 w-4" />
@@ -197,7 +207,7 @@ export default function LandingPage() {
                             <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Bring your stock into view.</h2>
                         </div>
                         <Link to="/login" className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:-translate-y-0.5 hover:bg-indigo-50">
-                            Sign in to SmartStock <ArrowRight className="h-4 w-4" />
+                            Sign in to GoodsPilot <ArrowRight className="h-4 w-4" />
                         </Link>
                     </div>
                 </section>
@@ -205,7 +215,7 @@ export default function LandingPage() {
 
             <footer className="border-t border-slate-200 bg-white">
                 <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-7 text-sm text-slate-500 sm:px-8 md:flex-row md:items-center md:justify-between">
-                    <p>© {new Date().getFullYear()} SmartStock. Inventory work, made clearer.</p>
+                    <p>© {new Date().getFullYear()} GoodsPilot. Smart Inventory. Smarter Operations.</p>
                     <div className="flex flex-wrap gap-x-5 gap-y-2">
                         <Link to="/help" className="hover:text-indigo-700">Help & support</Link>
                         <Link to="/privacy" className="hover:text-indigo-700">Privacy policy</Link>

@@ -3,22 +3,18 @@ import axiosInstance from './axiosInstance';
 import type { DemandForecast, ApiResponse } from '../types';
 
 export const forecastApi = {
-    getAll: async (): Promise<DemandForecast[]> => {
-        const response = await axiosInstance.get('/api/forecasts');
+    getCurrent: async (): Promise<DemandForecast[]> => {
+        const response = await axiosInstance.get('/api/forecasts/current');
         return response.data;
     },
 
     getByProduct: async (
         productId: number
     ): Promise<DemandForecast | null> => {
-        try {
-            const response = await axiosInstance.get(
-                `/api/forecasts/product/${productId}`
-            );
-            return response.data;
-        } catch {
-            return null;
-        }
+        const response = await axiosInstance.get(
+            `/api/forecasts/product/${productId}`
+        );
+        return response.data;
     },
 
     runJob: async (): Promise<ApiResponse> => {

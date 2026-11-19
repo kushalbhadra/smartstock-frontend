@@ -1,5 +1,9 @@
 import axiosInstance from './axiosInstance';
-import type { Supplier } from '../types';
+import type {
+    Supplier,
+    SupplierProduct,
+    SupplierProductAdminMapping,
+} from '../types';
 
 export const supplierApi = {
 
@@ -25,5 +29,54 @@ export const supplierApi = {
 
     delete: async (id: number): Promise<void> => {
         await axiosInstance.delete(`/api/suppliers/${id}`);
+    },
+
+    getProducts: async (supplierId: number): Promise<SupplierProduct[]> => {
+        const response = await axiosInstance.get(
+            `/api/suppliers/${supplierId}/products`
+        );
+        return response.data;
+    },
+
+    getAllMappings: async (): Promise<SupplierProductAdminMapping[]> => {
+        const response = await axiosInstance.get('/api/supplier-products');
+        return response.data;
+    },
+
+    getActiveProducts: async (
+        supplierId: number
+    ): Promise<SupplierProduct[]> => {
+        const response = await axiosInstance.get(
+            `/api/suppliers/${supplierId}/products/active`
+        );
+        return response.data;
+    },
+
+    addProduct: async (
+        supplierId: number,
+        mapping: {
+            productId: number;
+            purchasePrice?: number | null;
+            leadTimeDays?: number | null;
+            supplierProductCode?: string | null;
+        }
+    ): Promise<SupplierProduct> => {
+        const response = await axiosInstance.post(
+            `/api/suppliers/${supplierId}/products`,
+            mapping
+        );
+        return response.data;
+    },
+
+    setProductActive: async (
+        supplierId: number,
+        productId: number,
+        active: boolean
+    ): Promise<SupplierProduct> => {
+        const response = await axiosInstance.patch(
+            `/api/suppliers/${supplierId}/products/${productId}`,
+            { active }
+        );
+        return response.data;
     },
 };

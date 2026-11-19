@@ -29,6 +29,123 @@ export function TableSkeleton({ cols = 5, rows = 6 }: {
     );
 }
 
+export function StatCardSkeleton() {
+    return (
+        <article className="card flex items-center gap-4 p-5">
+            <div className="h-11 w-11 animate-pulse rounded-xl bg-slate-100" />
+            <div className="flex-1 space-y-2">
+                <div className="h-3 w-24 animate-pulse rounded bg-slate-100" />
+                <div className="h-7 w-16 animate-pulse rounded bg-slate-100" />
+            </div>
+        </article>
+    );
+}
+
+export function ChartSkeleton() {
+    return (
+        <section className="card p-5" aria-hidden="true">
+            <div className="mb-5 space-y-2">
+                <div className="h-4 w-40 animate-pulse rounded bg-slate-100" />
+                <div className="h-3 w-56 animate-pulse rounded bg-slate-100" />
+            </div>
+            <div className="h-64 animate-pulse rounded-lg bg-slate-100" />
+        </section>
+    );
+}
+
+export function ActivitySkeleton() {
+    return (
+        <section className="card overflow-hidden" aria-hidden="true">
+            <div className="flex items-center justify-between px-5 py-4">
+                <div className="h-4 w-40 animate-pulse rounded bg-slate-100" />
+                <div className="h-3 w-20 animate-pulse rounded bg-slate-100" />
+            </div>
+            <TableSkeleton cols={4} rows={4} />
+        </section>
+    );
+}
+
+export function NotificationSkeleton() {
+    return (
+        <div className="space-y-3" aria-label="Loading notifications">
+            {Array.from({ length: 4 }).map((_, index) => (
+                <article key={index}
+                    className="card flex items-start gap-4 p-4"
+                    aria-hidden="true">
+                    <div className="h-9 w-9 shrink-0 animate-pulse rounded-xl
+                                    bg-slate-100" />
+                    <div className="flex-1 space-y-2">
+                        <div className="h-4 w-48 max-w-full animate-pulse
+                                        rounded bg-slate-100" />
+                        <div className="h-3 w-full animate-pulse rounded
+                                        bg-slate-100" />
+                        <div className="h-3 w-2/3 animate-pulse rounded
+                                        bg-slate-100" />
+                    </div>
+                </article>
+            ))}
+        </div>
+    );
+}
+
+export function ForecastSkeleton() {
+    return (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+            aria-label="Loading forecasts">
+            {Array.from({ length: 6 }).map((_, index) => (
+                <article key={index} className="card space-y-4 p-5"
+                    aria-hidden="true">
+                    <div className="flex items-center justify-between">
+                        <div className="h-4 w-36 animate-pulse rounded bg-slate-100" />
+                        <div className="h-6 w-16 animate-pulse rounded-full bg-slate-100" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
+                        <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
+                    </div>
+                    <div className="h-2 animate-pulse rounded bg-slate-100" />
+                    <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
+                    <div className="h-10 animate-pulse rounded bg-slate-100" />
+                </article>
+            ))}
+        </div>
+    );
+}
+
+export function DashboardSkeleton() {
+    return (
+        <div className="space-y-7" aria-label="Loading dashboard">
+            <div className="space-y-2" aria-hidden="true">
+                <div className="h-3 w-28 animate-pulse rounded bg-slate-100" />
+                <div className="h-8 w-64 max-w-full animate-pulse rounded bg-slate-100" />
+                <div className="h-4 w-80 max-w-full animate-pulse rounded bg-slate-100" />
+            </div>
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                    <StatCardSkeleton key={index} />
+                ))}
+            </section>
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                aria-hidden="true">
+                {Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index}
+                        className="card h-14 animate-pulse bg-slate-100" />
+                ))}
+            </section>
+            <section className="grid gap-5 xl:grid-cols-2">
+                {Array.from({ length: 4 }).map((_, index) => (
+                    <ChartSkeleton key={index} />
+                ))}
+            </section>
+            <section className="grid gap-5 xl:grid-cols-2">
+                <ActivitySkeleton />
+                <ActivitySkeleton />
+            </section>
+            <NotificationSkeleton />
+        </div>
+    );
+}
+
 export function EmptyState({ icon: Icon, title, message }: {
     icon: ElementType;
     title: string;

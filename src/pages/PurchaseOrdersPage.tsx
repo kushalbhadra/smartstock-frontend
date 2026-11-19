@@ -3,7 +3,6 @@ import axios from 'axios';
 import { ClipboardList, Plus, PackageCheck } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { purchaseOrderApi } from '../api/purchaseOrderApi';
-import { productApi } from '../api/productApi';
 import { warehouseApi } from '../api/warehouseApi';
 import { supplierApi } from '../api/supplierApi';
 import { useAuth } from '../context/useAuth';
@@ -16,8 +15,7 @@ import { EmptyRow, TableWrap, Td, Th } from '../components/Table';
 import { fmtDate } from '../utils/format';
 import { getApiErrorMessage } from '../utils/apiError';
 import type {
-    Product, PurchaseOrder,
-    PurchaseOrderStatus, Supplier, Warehouse,
+    PurchaseOrder, PurchaseOrderStatus, Supplier, SupplierProduct, Warehouse,
 } from '../types';
 
 type SummaryStatus = Exclude<PurchaseOrderStatus, 'DELIVERED'>;
@@ -59,7 +57,6 @@ export default function PurchaseOrdersPage() {
     const { error: showError, success } = useToast();
 
     const [orders, setOrders]         = useState<PurchaseOrder[] | null>(null);
-    const [products, setProducts]     = useState<Product[]>([]);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [suppliers, setSuppliers]   = useState<Supplier[]>([]);
     const [loadError, setLoadError]   = useState<string | null>(null);
@@ -72,7 +69,6 @@ export default function PurchaseOrdersPage() {
 
     const fetchPageData = useCallback(() => Promise.allSettled([
         purchaseOrderApi.getAll(),
-        productApi.getAll(),
         warehouseApi.getAll(),
         supplierApi.getAll(),
     ]), []);
@@ -82,7 +78,6 @@ export default function PurchaseOrdersPage() {
     ) => {
         const [
             ordersResult,
-            productsResult,
             warehousesResult,
             suppliersResult,
         ] = results;
@@ -97,11 +92,6 @@ export default function PurchaseOrdersPage() {
             setLoadError(`Failed to load purchase orders: ${message}`);
         }
 
-        if (productsResult.status === 'fulfilled') {
-            setProducts(productsResult.value);
-        } else {
-            showError('Could not load products for purchase orders');
-        }
         if (warehousesResult.status === 'fulfilled') {
             setWarehouses(warehousesResult.value);
         } else {
@@ -386,7 +376,6 @@ export default function PurchaseOrdersPage() {
 
             {showAdd && (
                 <PurchaseOrderFormModal
-                    products={products}
                     warehouses={warehouses}
                     suppliers={suppliers}
                     defaultWarehouseId={
@@ -415,14 +404,12 @@ export default function PurchaseOrdersPage() {
 // ── PO FORM MODAL ─────────────────────────────────────────────────────
 
 function PurchaseOrderFormModal({
-    products,
     warehouses,
     suppliers,
     defaultWarehouseId,
     onClose,
     onSaved,
 }: {
-    products: Product[];
     warehouses: Warehouse[];
     suppliers: Supplier[];
     defaultWarehouseId?: number;
@@ -430,6 +417,7 @@ function PurchaseOrderFormModal({
     onSaved: () => void;
 }) {
     const toast = useToast();
+    const { error: showError } = toast;
 
     const [form, setForm] = useState({
         supplierId:   0,
@@ -439,20 +427,58 @@ function PurchaseOrderFormModal({
         purchaseUnitPrice: '',
         expectedDate: '',
     });
+    const [supplierProducts, setSupplierProducts] =
+        useState<SupplierProduct[]>([]);
+    const [supplierProductsLoading, setSupplierProductsLoading] =
+        useState(false);
+    const [supplierProductsError, setSupplierProductsError] =
+        useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        if (!form.supplierId) return () => { active = false; };
+        void Promise.resolve()
+            .then(() => supplierApi.getActiveProducts(form.supplierId))
+            .then(products => {
+                if (active) {
+                    setSupplierProducts(products);
+                }
+            })
+            .catch(error => {
+                if (active) {
+                    const message = getApiErrorMessage(
+                        error,
+                        "Could not load this supplier's products"
+                    );
+                    setSupplierProductsError(message);
+                    showError(message);
+                }
+            })
+            .finally(() => {
+                if (active) setSupplierProductsLoading(false);
+            });
+        return () => { active = false; };
+    }, [form.supplierId, showError]);
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
     ) => {
         const { name, value } = e.target;
+        if (name === 'supplierId') {
+            setSupplierProducts([]);
+            setSupplierProductsError(null);
+            setSupplierProductsLoading(Boolean(value));
+        }
         setForm(prev => ({
             ...prev,
             [name]: name === 'quantity' ||
                     name === 'supplierId' ||
                     name === 'productId' ||
                     name === 'warehouseId'
-                ? parseInt(value) || 0
+                ? parseInt(value, 10) || 0
                 : value,
+            ...(name === 'supplierId' ? { productId: 0 } : {}),
         }));
     };
 
@@ -493,8 +519,11 @@ function PurchaseOrderFormModal({
 
                 {/* Supplier */}
                 <div>
-                    <label className="label">Supplier *</label>
+                    <label className="label" htmlFor="po-supplier">
+                        Supplier *
+                    </label>
                     <select
+                        id="po-supplier"
                         name="supplierId"
                         value={form.supplierId}
                         onChange={handleChange}
@@ -511,26 +540,54 @@ function PurchaseOrderFormModal({
 
                 {/* Product */}
                 <div>
-                    <label className="label">Product *</label>
+                    <label className="label" htmlFor="po-product">
+                        Product *
+                    </label>
                     <select
+                        id="po-product"
                         name="productId"
                         value={form.productId}
                         onChange={handleChange}
                         className="input"
+                        disabled={!form.supplierId
+                            || supplierProductsLoading
+                            || supplierProducts.length === 0}
                     >
-                        <option value={0}>Select product...</option>
-                        {products.map(p => (
-                            <option key={p.id} value={p.id}>
-                                {p.name} ({p.sku})
+                        <option value={0}>
+                            {supplierProductsLoading
+                                ? 'Loading mapped products...'
+                                : form.supplierId
+                                ? 'Select mapped product...'
+                                : 'Select supplier first...'}
+                        </option>
+                        {supplierProducts.map(product => (
+                            <option key={product.productId}
+                                value={product.productId}>
+                                {product.productName} ({product.sku})
                             </option>
                         ))}
                     </select>
+                    {supplierProductsError && (
+                        <p role="alert" className="mt-1 text-xs text-rose-600">
+                            {supplierProductsError}
+                        </p>
+                    )}
+                    {form.supplierId && !supplierProductsLoading
+                        && !supplierProductsError
+                        && supplierProducts.length === 0 && (
+                        <p className="mt-1 text-xs text-slate-500">
+                            No active products are mapped to this supplier.
+                        </p>
+                    )}
                 </div>
 
                 {/* Warehouse */}
                 <div>
-                    <label className="label">Destination Warehouse *</label>
+                    <label className="label" htmlFor="po-warehouse">
+                        Destination Warehouse *
+                    </label>
                     <select
+                        id="po-warehouse"
                         name="warehouseId"
                         value={form.warehouseId}
                         onChange={handleChange}

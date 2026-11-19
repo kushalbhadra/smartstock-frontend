@@ -71,7 +71,7 @@ export default function AuditLogPage() {
                     <EmptyState
                         icon={ClipboardClock}
                         title="No activity recorded yet"
-                        message="Tracked changes will appear here as your team uses SmartStock."
+                        message="Tracked changes will appear here as your team uses GoodsPilot."
                     />
                 ) : (
                     <TableWrap>

@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronRight, Package, ShieldCheck } from 'lucide-react';
 import { authApi } from '../api/authApi';
 import { useAuth } from '../context/useAuth';
@@ -10,9 +10,13 @@ import { normalizeEmail, validateEmail } from '../utils/contactValidation';
 export default function LoginPage() {
     const { token, login } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const toast = useToast();
 
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState(() => {
+        const state = location.state as { registeredEmail?: string } | null;
+        return state?.registeredEmail ?? '';
+    });
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [emailError, setEmailError] = useState<string>();
@@ -47,7 +51,7 @@ export default function LoginPage() {
         } catch (error: unknown) {
             toast.error(getApiErrorMessage(
                 error,
-                'Unable to reach the SmartStock server. Check that the backend is running and try again.'
+                'Unable to reach the GoodsPilot service. Check that the backend is running and try again.'
             ));
         } finally {
             setLoading(false);
@@ -75,7 +79,7 @@ export default function LoginPage() {
                     </div>
                     <span className="text-white font-bold text-2xl
                                      tracking-tight">
-                        SmartStock
+                        GoodsPilot
                     </span>
                 </div>
 
@@ -84,13 +88,13 @@ export default function LoginPage() {
                                 p-8 sm:p-10">
                     <p className="text-indigo-600 text-xs font-bold
                                   uppercase tracking-[0.16em] mb-3">
-                        Inventory Intelligence
+                        Smart Inventory. Smarter Operations.
                     </p>
                     <h1 className="text-2xl font-bold text-slate-900">
                         Welcome back
                     </h1>
                     <p className="text-sm text-slate-500 mt-2 mb-8">
-                        Sign in to manage your inventory workspace.
+                        Intelligent Inventory and Warehouse Management.
                     </p>
 
                     {/* Form */}
@@ -174,8 +178,12 @@ export default function LoginPage() {
                     </form>
 
                     <div className="mt-6 border-t border-slate-100 pt-5 text-center">
-                        <p className="text-xs text-slate-400">
-                            Sign in with the account provided by your workspace administrator.
+                        <p className="text-xs text-slate-500">
+                            New to GoodsPilot?{' '}
+                            <Link to="/register"
+                                className="font-semibold text-indigo-600 hover:text-indigo-700">
+                                Create a viewer account
+                            </Link>
                         </p>
                     </div>
                 </div>
@@ -185,7 +193,7 @@ export default function LoginPage() {
                               mt-6 flex items-center
                               justify-center gap-1.5">
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    Smart, simple inventory operations.
+                    Intelligent Inventory and Warehouse Management.
                 </p>
             </div>
         </div>

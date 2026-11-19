@@ -4,6 +4,7 @@ import {
     BarChart3, Bell, Boxes, Building2, ClipboardList,
     LayoutDashboard, LogOut, Menu, Package, Settings,
     Sparkles, Truck, Users, X, CircleHelp, ClipboardClock, Database,
+    PackagePlus,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { cx } from '../utils/format';
@@ -21,6 +22,7 @@ const ADMIN_NAV_ITEMS = [
     { to: '/forecasts',       label: 'AI Forecasts',    icon: Sparkles },
     { to: '/notifications',  label: 'Notifications',   icon: Bell },
     { to: '/help',            label: 'Help & Support',  icon: CircleHelp },
+    { to: '/settings',        label: 'Profile & Settings', icon: Settings },
 ];
 
 const MANAGER_NAV_ITEMS = [
@@ -34,6 +36,7 @@ const MANAGER_NAV_ITEMS = [
     { to: '/forecasts',       label: 'AI Forecasts',    icon: Sparkles },
     { to: '/notifications',  label: 'Notifications',   icon: Bell },
     { to: '/help',            label: 'Help & Support',  icon: CircleHelp },
+    { to: '/settings',        label: 'Profile & Settings', icon: Settings },
 ];
 
 const VIEWER_NAV_ITEMS = [
@@ -50,6 +53,7 @@ const VIEWER_NAV_ITEMS = [
 
 const ADMIN_ITEMS = [
     { to: '/users',    label: 'Users & Access', icon: Users },
+    { to: '/supplier-product-mappings', label: 'Supplier Product Mapping', icon: PackagePlus },
     { to: '/settings', label: 'Settings',       icon: Settings },
     { to: '/audit-log', label: 'Audit Log',      icon: ClipboardClock },
     { to: '/data',      label: 'Data & Retention', icon: Database },
@@ -102,7 +106,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
                     to="/"
                     end
                     onClick={() => setSidebarOpen(false)}
-                    aria-label="SmartStock dashboard"
+                    aria-label="GoodsPilot dashboard"
                     className="h-16 flex items-center gap-3 px-5
                                border-b border-slate-700/50
                                transition-colors hover:bg-slate-800
@@ -117,7 +121,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
                     </div>
                     <span className="font-bold text-white text-lg
                                      tracking-tight">
-                        SmartStock
+                        GoodsPilot
                     </span>
                 </NavLink>
 
@@ -255,10 +259,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
                         <div>
                             <h1 className="font-bold text-slate-900 text-lg
                                            leading-tight">
-                                SmartStock
+                                GoodsPilot
                             </h1>
                             <p className="text-xs text-slate-400">
-                                Inventory Intelligence
+                                Smart Inventory. Smarter Operations.
                             </p>
                         </div>
                     </div>

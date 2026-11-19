@@ -34,3 +34,18 @@ export function validateIndianPhone(
 export function normalizeIndianPhone(phone: string): string {
     return phone.startsWith('+91') ? phone.slice(3) : phone;
 }
+
+export function validatePasswordStrength(
+    password: string
+): string | undefined {
+    if (password.length < 8) {
+        return 'Password must be at least 8 characters long.';
+    }
+    if (new TextEncoder().encode(password).length > 72) {
+        return 'Password must be no more than 72 UTF-8 bytes.';
+    }
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+        return 'Password must contain at least one letter and one number.';
+    }
+    return undefined;
+}

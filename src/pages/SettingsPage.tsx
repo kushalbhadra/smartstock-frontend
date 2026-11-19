@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Building2, Bell, Save, UserRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, Bell, KeyRound, Save, UserRound } from 'lucide-react';
 import { settingsApi } from '../api/settingsApi';
 import { userApi } from '../api/userApi';
 import { PageHeader } from '../components/PageHeader';
@@ -7,6 +8,7 @@ import { PageLoader } from '../components/ui/Spinner';
 import { useAuth } from '../context/useAuth';
 import { useToast } from '../context/useToast';
 import { getApiErrorMessage } from '../utils/apiError';
+import { validatePasswordStrength } from '../utils/contactValidation';
 import {
     normalizeEmail,
     normalizeIndianPhone,
@@ -21,20 +23,36 @@ const EMPTY_PROFILE: UserProfileRequest = {
 };
 
 const EMPTY_SETTINGS: SystemSettings = {
-    companyName: 'SmartStock',
+    companyName: 'GoodsPilot',
     contactEmail: '',
     contactPhone: '',
     defaultLowStockThreshold: 10,
 };
 
 export default function SettingsPage() {
-    const { updateProfile } = useAuth();
+    const { updateProfile, isAdmin, logout } = useAuth();
+    const navigate = useNavigate();
     const { error: showError, success: showSuccess } = useToast();
     const [profile, setProfile] = useState(EMPTY_PROFILE);
     const [settings, setSettings] = useState(EMPTY_SETTINGS);
     const [loading, setLoading] = useState(true);
+    const [loadAttempt, setLoadAttempt] = useState(0);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [settingsLoadError, setSettingsLoadError] =
+        useState<string | null>(null);
     const [savingProfile, setSavingProfile] = useState(false);
     const [savingSettings, setSavingSettings] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+    });
+    const [passwordErrors, setPasswordErrors] = useState<{
+        currentPassword?: string;
+        newPassword?: string;
+        confirmPassword?: string;
+    }>({});
+    const [savingPassword, setSavingPassword] = useState(false);
     const [profilePhoneError, setProfilePhoneError] = useState<string>();
     const [contactErrors, setContactErrors] = useState<{
         email?: string;
@@ -42,27 +60,50 @@ export default function SettingsPage() {
     }>({});
 
     useEffect(() => {
-        const loadSettings = async () => {
-            try {
-                const [currentUser, systemSettings] = await Promise.all([
-                    userApi.getCurrentProfile(),
-                    settingsApi.get(),
-                ]);
-                setProfile(toProfileForm(currentUser));
-                setSettings(systemSettings);
-            } catch (error) {
-                showError(getApiErrorMessage(
-                    error, 'Failed to load settings'
-                ));
-            } finally {
-                setLoading(false);
+        let isActive = true;
+        void Promise.allSettled([
+            userApi.getCurrentProfile(),
+            isAdmin ? settingsApi.get() : Promise.resolve(null),
+        ]).then(([profileResult, settingsResult]) => {
+            if (!isActive) return;
+            if (profileResult.status === 'fulfilled') {
+                setProfile(toProfileForm(profileResult.value));
+                setLoadError(null);
+            } else {
+                const message = getApiErrorMessage(
+                    profileResult.reason, 'Failed to load your profile'
+                );
+                setLoadError(message);
+                showError(message);
             }
+            if (settingsResult.status === 'fulfilled') {
+                setSettingsLoadError(null);
+                if (settingsResult.value) setSettings(settingsResult.value);
+            } else {
+                const message = getApiErrorMessage(
+                    settingsResult.reason, 'Failed to load company settings'
+                );
+                setSettingsLoadError(message);
+                showError(message);
+            }
+            setLoading(false);
+        });
+        return () => {
+            isActive = false;
         };
-        void loadSettings();
-    }, [showError]);
+    }, [isAdmin, loadAttempt, showError]);
+
+    const retrySettingsLoad = () => {
+        setLoading(true);
+        setLoadAttempt(attempt => attempt + 1);
+    };
 
     const handleProfileSubmit = async (event: FormEvent) => {
         event.preventDefault();
+        if (!profile.name.trim() || profile.name.trim().length > 100) {
+            showError('Name is required and must be 100 characters or fewer');
+            return;
+        }
         const phoneError = validateIndianPhone(profile.phone);
         setProfilePhoneError(phoneError);
         if (phoneError) return;
@@ -121,14 +162,62 @@ export default function SettingsPage() {
         }
     };
 
+    const handlePasswordSubmit = async (event: FormEvent) => {
+        event.preventDefault();
+        const nextErrors: typeof passwordErrors = {};
+        if (!passwordForm.currentPassword) {
+            nextErrors.currentPassword = 'Current password is required.';
+        }
+        nextErrors.newPassword = validatePasswordStrength(
+            passwordForm.newPassword
+        );
+        if (!passwordForm.confirmPassword) {
+            nextErrors.confirmPassword = 'Please confirm your new password.';
+        } else if (passwordForm.newPassword
+                !== passwordForm.confirmPassword) {
+            nextErrors.confirmPassword = 'Passwords do not match.';
+        }
+        setPasswordErrors(nextErrors);
+        if (Object.values(nextErrors).some(Boolean)) return;
+
+        setSavingPassword(true);
+        try {
+            await userApi.changeCurrentPassword(passwordForm);
+            showSuccess(
+                'Password changed. Sign in again with your new password.'
+            );
+            logout();
+            navigate('/login', { replace: true });
+        } catch (error) {
+            showError(getApiErrorMessage(
+                error, 'Failed to change your password'
+            ));
+        } finally {
+            setSavingPassword(false);
+        }
+    };
+
     if (loading) return <PageLoader />;
+    if (loadError) {
+        return (
+            <section className="card p-8 text-center">
+                <p role="alert" className="text-sm text-rose-600">
+                    {loadError}
+                </p>
+                <button type="button" className="btn-secondary mt-4"
+                    onClick={retrySettingsLoad}>
+                    Try again
+                </button>
+            </section>
+        );
+    }
 
     return (
         <>
             <PageHeader
-                eyebrow="Administration"
-                title="Settings"
-                description="Manage your profile, company details, and inventory defaults."
+                eyebrow={isAdmin ? 'Administration' : 'Account'}
+                title="Profile & Settings"
+                description="Manage your profile, password, and account settings."
             />
 
             <div className="grid gap-5 xl:grid-cols-2">
@@ -209,6 +298,94 @@ export default function SettingsPage() {
                 </section>
 
                 <section className="card p-5 sm:p-6">
+                    <div className="mb-6 flex items-start gap-3">
+                        <div className="rounded-xl bg-amber-50 p-2.5 text-amber-700">
+                            <KeyRound className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h2 className="font-semibold text-slate-900">
+                                Change password
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Verify your current password before choosing a new one.
+                            </p>
+                        </div>
+                    </div>
+                    <form onSubmit={handlePasswordSubmit}
+                        className="space-y-4" noValidate>
+                        <PasswordField
+                            id="current-password"
+                            label="Current password"
+                            value={passwordForm.currentPassword}
+                            error={passwordErrors.currentPassword}
+                            onChange={value => {
+                                setPasswordForm(prev => ({
+                                    ...prev, currentPassword: value,
+                                }));
+                                setPasswordErrors(prev => ({
+                                    ...prev, currentPassword: undefined,
+                                }));
+                            }}
+                            autoComplete="current-password"
+                        />
+                        <PasswordField
+                            id="new-password"
+                            label="New password"
+                            value={passwordForm.newPassword}
+                            error={passwordErrors.newPassword}
+                            onChange={value => {
+                                setPasswordForm(prev => ({
+                                    ...prev, newPassword: value,
+                                }));
+                                setPasswordErrors(prev => ({
+                                    ...prev, newPassword: undefined,
+                                }));
+                            }}
+                            autoComplete="new-password"
+                        />
+                        <PasswordField
+                            id="confirm-new-password"
+                            label="Confirm new password"
+                            value={passwordForm.confirmPassword}
+                            error={passwordErrors.confirmPassword}
+                            onChange={value => {
+                                setPasswordForm(prev => ({
+                                    ...prev, confirmPassword: value,
+                                }));
+                                setPasswordErrors(prev => ({
+                                    ...prev, confirmPassword: undefined,
+                                }));
+                            }}
+                            autoComplete="new-password"
+                        />
+                        <p className="text-xs leading-5 text-slate-400">
+                            Use at least 8 characters, including a letter and a
+                            number. This browser will sign out after the change;
+                            tokens on other devices remain valid until they expire.
+                        </p>
+                        <div className="flex justify-end pt-2">
+                            <button type="submit" className="btn-primary"
+                                disabled={savingPassword}>
+                                <Save className="h-4 w-4" />
+                                {savingPassword
+                                    ? 'Updating...'
+                                    : 'Change password'}
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                {isAdmin && (settingsLoadError ? (
+                    <section className="card p-6">
+                        <p role="alert" className="text-sm text-rose-600">
+                            Company settings could not be loaded: {settingsLoadError}
+                        </p>
+                        <button type="button" className="btn-secondary mt-4"
+                            onClick={retrySettingsLoad}>
+                            Try again
+                        </button>
+                    </section>
+                ) : <section className="card p-5 sm:p-6">
                     <div className="flex items-start gap-3 mb-6">
                         <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-600">
                             <Building2 className="w-5 h-5" />
@@ -339,7 +516,7 @@ export default function SettingsPage() {
                             </button>
                         </div>
                     </form>
-                </section>
+                </section>)}
             </div>
         </>
     );
@@ -350,4 +527,43 @@ function toProfileForm(user: User): UserProfileRequest {
         name: user.name,
         phone: user.phone ?? '',
     };
+}
+
+function PasswordField({
+    id,
+    label,
+    value,
+    error,
+    onChange,
+    autoComplete,
+}: {
+    id: string;
+    label: string;
+    value: string;
+    error?: string;
+    onChange: (value: string) => void;
+    autoComplete: 'current-password' | 'new-password';
+}) {
+    return (
+        <div>
+            <label className="label" htmlFor={id}>{label}</label>
+            <input
+                id={id}
+                type="password"
+                autoComplete={autoComplete}
+                className={`input ${error ? 'border-rose-500' : ''}`}
+                value={value}
+                onChange={event => onChange(event.target.value)}
+                aria-invalid={!!error}
+                aria-describedby={error ? `${id}-error` : undefined}
+                required
+            />
+            {error && (
+                <p id={`${id}-error`} role="alert"
+                    className="mt-1 text-xs text-rose-600">
+                    {error}
+                </p>
+            )}
+        </div>
+    );
 }

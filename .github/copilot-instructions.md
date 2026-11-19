@@ -1,4 +1,4 @@
-# SmartStock repository instructions
+# GoodsPilot repository instructions
 
 ## Build, test, and lint
 
@@ -28,7 +28,7 @@ The backend has no configured lint command.
 
 ## Architecture
 
-SmartStock is an inventory-management application split between this React
+GoodsPilot is an inventory-management application split between this React
 frontend and a separate Spring Boot API. The frontend is React, TypeScript,
 Vite, and React Router. `src/main.tsx` installs the router and the auth and
 toast providers; `src/App.tsx` defines public routes, authenticated routes,

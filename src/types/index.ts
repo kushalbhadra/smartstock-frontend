@@ -38,6 +38,19 @@ export interface LoginRequest {
     password: string;
 }
 
+export interface RegistrationRequest {
+    name: string;
+    email: string;
+    phone?: string;
+    password: string;
+}
+
+export interface ChangePasswordRequest {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+}
+
 export interface LoginResponse {
     token: string;
     userId: number;
@@ -161,6 +174,22 @@ export interface Supplier {
     createdAt?: string;
 }
 
+export interface SupplierProduct {
+    productId: number;
+    productName: string;
+    sku: string;
+    purchasePrice: number | null;
+    leadTimeDays: number | null;
+    supplierProductCode: string | null;
+    active: boolean;
+}
+
+export interface SupplierProductAdminMapping extends SupplierProduct {
+    id: number;
+    supplierId: number;
+    supplierName: string;
+}
+
 export interface PurchaseOrder {
     id: number;
     poNumber: string;
@@ -232,14 +261,37 @@ export interface DashboardSummary {
 
 export interface DemandForecast {
     id: number;
-    product: Product;
-    forecastNextWeek: number;
-    forecastNextMonth: number;
-    confidenceScore: number;
-    anomalyDetected: boolean;
-    recommendation: string;
-    suggestedReorderQuantity: number;
-    createdAt: string;
+    product: Pick<Product, 'id' | 'name' | 'sku'>;
+    warehouseId?: number | null;
+    warehouseName?: string | null;
+    forecastNextDay?: number | null;
+    forecastNextWeek?: number | null;
+    forecastNextMonth?: number | null;
+    confidenceScore?: number | null;
+    anomalyDetected?: boolean | null;
+    recommendation?: string | null;
+    suggestedReorderQuantity?: number | null;
+    status: 'SUCCESS' | 'INSUFFICIENT_DATA' | 'FAILED' | 'LEGACY';
+    statusMessage?: string | null;
+    modelName?: string | null;
+    historicalDemand: ForecastDataPoint[];
+    dailyPredictions: ForecastDataPoint[];
+    accuracyMae?: number | null;
+    accuracyWape?: number | null;
+    accuracyDays?: number | null;
+    accuracyComparison: ForecastAccuracyPoint[];
+    createdAt?: string | null;
+}
+
+export interface ForecastDataPoint {
+    date: string;
+    units: number;
+}
+
+export interface ForecastAccuracyPoint {
+    date: string;
+    actualUnits: number;
+    predictedUnits: number;
 }
 
 export interface AlertLog {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Pencil, Plus, Star, Trash2, Truck } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { PackagePlus, Pencil, Plus, Star, Trash2, Truck } from 'lucide-react';
 import { supplierApi } from '../api/supplierApi';
 import { purchaseOrderApi } from '../api/purchaseOrderApi';
 import { useAuth } from '../context/useAuth';
@@ -48,25 +48,30 @@ export default function SuppliersPage() {
     const [searchParams] = useSearchParams();
 
     const [suppliers, setSuppliers]   = useState<Supplier[] | null>(null);
+    const [loadError, setLoadError]   = useState<string | null>(null);
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [showAdd, setShowAdd] = useState(
         () => searchParams.get('action') === 'add' && isAdmin
     );
     const [editItem, setEditItem]     = useState<Supplier | null>(null);
     const [deleteItem, setDeleteItem] = useState<Supplier | null>(null);
-
    
 const load = useCallback(async () => {
     try {
         setSuppliers(await supplierApi.getAll());
+        setLoadError(null);
         try {
             setPurchaseOrders(await purchaseOrderApi.getAll());
         } catch {
             setPurchaseOrders([]);
             error('Supplier purchase history is unavailable');
         }
-    } catch {
-        error('Failed to load suppliers');
+    } catch (reason) {
+        const message = getApiErrorMessage(
+            reason, 'Failed to load suppliers'
+        );
+        setLoadError(message);
+        error(message);
     }
 }, [error]);
 
@@ -117,7 +122,20 @@ useEffect(() => {
             />
 
             <div className="card">
-                {!suppliers ? (
+                {loadError ? (
+                    <div className="p-8 text-center">
+                        <p role="alert" className="text-sm text-rose-600">
+                            {loadError}
+                        </p>
+                        <button type="button" className="btn-secondary mt-4"
+                            onClick={() => {
+                                setLoadError(null);
+                                void load();
+                            }}>
+                            Try again
+                        </button>
+                    </div>
+                ) : !suppliers ? (
                     <TableSkeleton cols={5} />
                 ) : suppliers.length === 0 ? (
                     <EmptyState
@@ -208,6 +226,17 @@ useEffect(() => {
                                     {isAdmin && (
                                         <Td>
                                             <div className="flex gap-2">
+                                                <Link
+                                                    to={`/supplier-product-mappings?supplierId=${s.id}`}
+                                                    className="p-1.5 rounded-lg
+                                                               text-slate-400
+                                                               hover:text-indigo-600
+                                                               hover:bg-indigo-50"
+                                                    aria-label={`Manage products for ${s.name}`}
+                                                    title="Manage products"
+                                                >
+                                                    <PackagePlus className="w-4 h-4" />
+                                                </Link>
                                                 <button
                                                     onClick={() =>
                                                         setEditItem(s)
